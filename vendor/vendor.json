@@ -1,0 +1,93 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"path": "-V",
+			"revision": ""
+		},
+		{
+			"path": "-v",
+			"revision": ""
+		},
+		{
+			"path": "code.google.com/p/log4go",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "YZ2Vu53/nHEGEC9NwNyhrn5k3+0=",
+			"path": "github.com/alecthomas/log4go",
+			"revision": "e5dc62318d9bd58682f1dceb53a4b24e8253682f",
+			"revisionTime": "2016-03-07T01:12:53Z",
+			"tree": true
+		},
+		{
+			"checksumSHA1": "TmiFLRn/pbnj8wZRXiR8u+Y2k4E=",
+			"path": "github.com/cc14514/go-lightrpc/rpcserver",
+			"revision": "e8ccbc21508c5951ee90d3a118d2c8c14f1f3299",
+			"revisionTime": "2016-12-07T02:26:10Z",
+			"tree": true
+		},
+		{
+			"checksumSHA1": "vJrT/JlwQ8KimImEFvzBeh6Ny/0=",
+			"path": "github.com/golibs/uuid",
+			"revision": "1dd34a9ad6c0e8dec93107f9c7425ea5713f78e1",
+			"revisionTime": "2013-03-06T16:26:36Z"
+		},
+		{
+			"checksumSHA1": "fsmoUOKo3g/iBB+YcmgoaMG8Rlk=",
+			"path": "github.com/gorilla/websocket",
+			"revision": "adf16b31781325cbd41085c5be901d95b4d1f33d",
+			"revisionTime": "2017-01-01T04:13:41Z"
+		},
+		{
+			"checksumSHA1": "nKougSxJuVwW3uxadj7unRIu9j4=",
+			"path": "github.com/mediocregopher/radix.v2",
+			"revision": ""
+		},
+		{
+			"path": "github.com/mediocregopher/radix.v2/pool",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "U1tuJltYsftDTEdsPyen1/rjCvk=",
+			"path": "github.com/mediocregopher/radix.v2/pubsub",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "LjPdvMphElL0GOVNQCsmZMVgWIw=",
+			"path": "github.com/rs/cors",
+			"revision": "a62a804a8a009876ca59105f7899938a1349f4b3",
+			"revisionTime": "2016-06-17T23:19:35Z"
+		},
+		{
+			"checksumSHA1": "hCRfPlNpqv8tvVivLzmXsoUOf1c=",
+			"path": "github.com/rs/xhandler",
+			"revision": "ed27b6fd65218132ee50cd95f38474a3d8a2cd12",
+			"revisionTime": "2016-06-18T19:32:21Z"
+		},
+		{
+			"checksumSHA1": "7jNYFx/h1AzhPR2C1OGZ38lBWsE=",
+			"path": "github.com/tidwall/gjson",
+			"revision": "c1e65a498d37a36a3f7dda77fb8cdee7b26940c9",
+			"revisionTime": "2016-12-02T18:59:39Z"
+		},
+		{
+			"checksumSHA1": "qmePMXEDYGwkAfT9QvtMC58JN/E=",
+			"path": "github.com/tidwall/match",
+			"revision": "173748da739a410c5b0b813b956f89ff94730b4c",
+			"revisionTime": "2016-08-30T17:39:30Z"
+		},
+		{
+			"checksumSHA1": "zWcD+hiuLdxgBd4oRQnAsdNBXSc=",
+			"path": "github.com/urfave/cli",
+			"revision": "d53eb991652b1d438abdd34ce4bfa3ef1539108e",
+			"revisionTime": "2016-09-17T21:38:06Z"
+		},
+		{
+			"path": "golang.org/x/net/context",
+			"revision": ""
+		}
+	],
+	"rootPath": "sara"
+}

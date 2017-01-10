@@ -1,0 +1,41 @@
+<html>
+<button onclick="connect()">connect</button><br/>
+<button onclick="login()">login</button><br/>
+<button onclick="heartbeat()">heart beat</button><br/>
+<button onclick="sendMessage()">send message</button><br/>
+</html>
+
+<script>
+var ws = null;
+function connect(){
+    ws = new WebSocket('ws://127.0.0.1:4224');
+    ws.onerror = function(e){
+        console.log("error ==> "+e.data)
+    }
+    ws.onclose = function(e){
+        console.log("close ==> "+e.data)
+    }
+    ws.onmessage = function(e){
+        var data = e.data
+        if(data=="\\02"){
+            console.log("💗");
+        }else if(data=="\\03"){
+            console.log("☠️");
+        }else{
+            console.log(data.length,data);
+            var packet = JSON.parse(data);
+            var msgtype = packet.envelope.type;
+            var msgId = packet.envelope.id;
+            ws.send('{"envelope":{"id":"'+msgId+'","type":3,"from":"test2@a.a","to":"server_ack"},"vsn":"0.0.1"}');
+        }
+    }
+}
+
+function login(){
+    console.log("open ==> ")
+    ws.send('{"envelope":{"id":"1234567890","type":0,"jid":"test2@a.a","pwd":"abc123"},"vsn":"0.0.1"}');
+}
+function heartbeat(){
+    ws.send("\02");
+}
+</script>
