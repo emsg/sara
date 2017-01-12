@@ -77,7 +77,9 @@ func (self *Session) openSession(p []byte) {
 			//将消息id与dealy.packets 中的消息id
 			//映射到内存中，等待ack时，删除这一批离线消息
 			log4go.Debug(ofl_ids)
-			ofl_cache.put(envelope.Id, ofl_ids)
+			if len(ofl_ids) > 0 {
+				ofl_cache.put(envelope.Id, ofl_ids)
+			}
 		}
 		log4go.Info("login jid=%s , pwd=%s , %s", jid, pwd, p)
 		self.storeSessionStatus()
@@ -185,8 +187,11 @@ func (self *Session) closeSession(tracemsg string) {
 	self.clean <- self.Status.Sid
 	if self.Status.Status == types.STATUS_LOGIN {
 		j, _ := types.NewJID(self.Status.Jid)
-		k := j.StringWithoutResource()
-		self.ssdb.Delete([]byte(k))
+		//k := j.StringWithoutResource()
+		k := j.ToSessionid()
+		if err := self.ssdb.Delete(k); err != nil {
+			log4go.Error("🎀  del_error = %s", err)
+		}
 	}
 	self.Status.Status = types.STATUS_CLOSE
 	self.sc.Close()

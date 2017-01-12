@@ -37,6 +37,11 @@ var (
 		Usage: "redis addr,format as ip:port ",
 		Value: "localhost:6379",
 	}
+	DBPoolFlag = cli.IntFlag{
+		Name:  "dbpool",
+		Usage: "redis pool size",
+		Value: 1000,
+	}
 	NodeFlag = cli.StringFlag{
 		Name:  "node",
 		Usage: "node name , unique  (default: uuid.hex)",
@@ -53,6 +58,7 @@ func InitFlags() []cli.Flag {
 		LogfileFlag,
 		LogLevelFlag,
 		DBAddrFlag,
+		DBPoolFlag,
 		NodeFlag,
 	}
 }

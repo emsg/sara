@@ -143,19 +143,20 @@ func (self *Node) dataChannelHandler(message string) {
 func New(ctx *cli.Context) *Node {
 	node := &Node{
 		sessionMap:   make(map[string]*core.Session),
-		cleanSession: make(chan string, 2048),
+		cleanSession: make(chan string, 4096),
 		Port:         ctx.GlobalInt("port"),
 		WSPort:       ctx.GlobalInt("wsport"),
 	}
 	dbaddr := ctx.GlobalString("dbaddr")
+	dbpool := ctx.GlobalInt("dbpool")
 	if nodename := ctx.GlobalString("node"); nodename != "" {
 		node.name = nodename
 	} else {
 		//TODO 应该用cpu 之类的信息，不应该用 uuid
 		node.name = uuid.Rand().Hex()
 	}
-	if db, err := saradb.NewClusterDatabase(dbaddr, 20); err != nil {
-		if db, err = saradb.NewDatabase(dbaddr, 20); err != nil {
+	if db, err := saradb.NewClusterDatabase(dbaddr, dbpool); err != nil {
+		if db, err = saradb.NewDatabase(dbaddr, dbpool); err != nil {
 			log4go.Error(err)
 			return nil
 		} else {

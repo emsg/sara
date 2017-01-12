@@ -56,12 +56,18 @@ func (self *SaraDatabase) Get(key []byte) ([]byte, error) {
 	return r.Bytes()
 }
 func (self *SaraDatabase) Delete(key []byte) error {
-	self.execute("DEL", key)
-	return nil
+	r := self.execute("DEL", key)
+	return r.Err
 }
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
-	self.execute("ZADD", idx, utils.Timestamp13(), key)
-	self.execute("SETEX", key, ex, value)
+	r := self.execute("ZADD", idx, utils.Timestamp13(), key)
+	if r.Err != nil {
+		return r.Err
+	}
+	r = self.execute("SETEX", key, ex, value)
+	if r.Err != nil {
+		return r.Err
+	}
 	return nil
 }
 func (self *SaraDatabase) DeleteByIdx(idx []byte) error {
@@ -167,9 +173,9 @@ func (self *SaraDatabase) GenDataChannel(name string) (dc DataChannel) {
 	var db *SaraDatabase
 	switch self.model {
 	case MODEL_SINGLE:
-		db, _ = NewDatabase(self.Addr, 500)
+		db, _ = NewDatabase(self.Addr, 5)
 	case MODEL_CLUSTER:
-		db, _ = NewClusterDatabase(self.Addr, 500)
+		db, _ = NewClusterDatabase(self.Addr, 5)
 	}
 	sub := db.getRedisClient(name)
 	pub := db.getRedisClient(name)
