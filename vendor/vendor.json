@@ -46,12 +46,23 @@
 			"revision": ""
 		},
 		{
+			"checksumSHA1": "mmEm65nRb23EhdF4wiMoXm/d1A4=",
+			"path": "github.com/mediocregopher/radix.v2/cluster",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "/Ag77fi+cY0EG/UET39pyAEDzJE=",
 			"path": "github.com/mediocregopher/radix.v2/pool",
 			"revision": ""
 		},
 		{
 			"checksumSHA1": "U1tuJltYsftDTEdsPyen1/rjCvk=",
 			"path": "github.com/mediocregopher/radix.v2/pubsub",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "LkMTNEcMHUPSti0AsNHJKNr/B5E=",
+			"path": "github.com/mediocregopher/radix.v2/redis",
 			"revision": ""
 		},
 		{

@@ -128,10 +128,12 @@ func (self *Session) verify(p []byte) (packet *types.Packet, ok bool) {
 }
 
 func (self *Session) heartbeat() {
-	hb := []byte{types.HEART_BEAT}
-	self.SendMessage(hb)
-	self.storeSessionStatus()
-	log4go.Debug("❤️  %s ->%d", self.Status.Jid, hb)
+	if self.Status.Status == types.STATUS_LOGIN {
+		hb := []byte{types.HEART_BEAT}
+		self.SendMessage(hb)
+		self.storeSessionStatus()
+		log4go.Debug("❤️  %s ->%d", self.Status.Jid, hb)
+	}
 }
 
 func (self *Session) answer(packet *types.Packet) {
@@ -270,7 +272,7 @@ func (self *Session) storeSessionStatus() {
 	j, _ := types.NewJID(jidStr)
 	key := j.ToSessionid()
 	val := self.Status.ToJson()
-	log4go.Debug("storeSessionStatus-> %s", val)
+	//log4go.Debug("storeSessionStatus-> %s", val)
 	self.ssdb.PutEx(key, val, SESSION_TIMEOUT)
 }
 

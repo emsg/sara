@@ -56,3 +56,29 @@ func InitFlags() []cli.Flag {
 		NodeFlag,
 	}
 }
+
+var (
+	Total = cli.IntFlag{
+		Name:  "total,t",
+		Usage: "execute 'ulimit -n' to fetch the max value",
+		Value: 1024,
+	}
+	Addr = cli.StringFlag{
+		Name:  "addr,a",
+		Usage: "host:port",
+		Value: "localhost:4222",
+	}
+	ConnType = cli.IntFlag{
+		Name:  "conn_type",
+		Usage: "0 tcp,1 ws,2 ssl,3 wss",
+		Value: 0,
+	}
+)
+
+func InitFlagsForTestOfMakeConn() []cli.Flag {
+	return []cli.Flag{
+		Total,
+		Addr,
+		ConnType,
+	}
+}

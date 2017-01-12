@@ -28,6 +28,15 @@ func init() {
 	app.Email = "cc14514@icloud.com"
 	app.Flags = utils.InitFlags()
 	app.Action = sara
+	app.Commands = []cli.Command{
+		{
+			Name:     "makeconn",
+			Usage:    "创建指定个数的连接，测试最大连接数",
+			Category: "test",
+			Flags:    utils.InitFlagsForTestOfMakeConn(),
+			Action:   makeconnForTest,
+		},
+	}
 	app.Before = func(ctx *cli.Context) error {
 		filepath := ctx.GlobalString("logfile")
 		idx := ctx.GlobalInt("loglevel")
@@ -59,5 +68,12 @@ func sara(ctx *cli.Context) error {
 	n.StartTCP()
 	n.StartWS()
 	n.Wait()
+	return nil
+}
+
+func makeconnForTest(ctx *cli.Context) error {
+	a := ctx.String("addr")
+	t := ctx.Int("total")
+	utils.MakeConn(a, t)
 	return nil
 }
