@@ -167,9 +167,9 @@ func (self *SaraDatabase) GenDataChannel(name string) (dc DataChannel) {
 	var db *SaraDatabase
 	switch self.model {
 	case MODEL_SINGLE:
-		db, _ = NewDatabase(self.Addr, 2)
+		db, _ = NewDatabase(self.Addr, 500)
 	case MODEL_CLUSTER:
-		db, _ = NewClusterDatabase(self.Addr, 2)
+		db, _ = NewClusterDatabase(self.Addr, 500)
 	}
 	sub := db.getRedisClient(name)
 	pub := db.getRedisClient(name)
