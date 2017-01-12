@@ -7,6 +7,7 @@ https://github.com/alecthomas/log4go 日志
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sara/node"
 	"sara/utils"
 
@@ -20,6 +21,10 @@ var (
 )
 
 func init() {
+	cpu_core := runtime.NumCPU()
+	runtime.GOMAXPROCS(cpu_core)
+	fmt.Println("cpu_core_total", cpu_core)
+
 	app = cli.NewApp()
 	app.Name = os.Args[0]
 	app.Usage = "SARA IM Server"
