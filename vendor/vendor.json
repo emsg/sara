@@ -15,6 +15,16 @@
 			"revision": ""
 		},
 		{
+			"checksumSHA1": "gkjb2qXbGWnlVCZQ9ftlz4tNkdg=",
+			"path": "emsg/emsg_inf_push",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "iYwcP0aXWQx5s2+ltOU0smXL58g=",
+			"path": "git.apache.org/thrift.git/lib/go/thrift",
+			"revision": ""
+		},
+		{
 			"checksumSHA1": "YZ2Vu53/nHEGEC9NwNyhrn5k3+0=",
 			"path": "github.com/alecthomas/log4go",
 			"revision": "e5dc62318d9bd58682f1dceb53a4b24e8253682f",

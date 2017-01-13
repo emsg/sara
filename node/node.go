@@ -2,15 +2,18 @@ package node
 
 import (
 	"fmt"
-	"github.com/alecthomas/log4go"
-	"github.com/golibs/uuid"
-	"github.com/gorilla/websocket"
-	"github.com/urfave/cli"
 	"net"
 	"net/http"
+	"os"
 	"sara/core"
 	"sara/core/types"
 	"sara/saradb"
+	"sara/sararpc"
+	"strconv"
+
+	"github.com/alecthomas/log4go"
+	"github.com/gorilla/websocket"
+	"github.com/urfave/cli"
 )
 
 type Node struct {
@@ -21,7 +24,7 @@ type Node struct {
 	cleanSession          chan string
 	tcpListen             net.Listener
 	db                    saradb.Database //SessionStatus db
-	dataChannel           saradb.DataChannel
+	dataChannel           sararpc.DataChannel
 }
 
 var upgrader = websocket.Upgrader{
@@ -149,12 +152,16 @@ func New(ctx *cli.Context) *Node {
 	}
 	dbaddr := ctx.GlobalString("dbaddr")
 	dbpool := ctx.GlobalInt("dbpool")
-	if nodename := ctx.GlobalString("node"); nodename != "" {
-		node.name = nodename
-	} else {
-		//TODO 应该用cpu 之类的信息，不应该用 uuid
-		node.name = uuid.Rand().Hex()
+
+	hostname := ctx.GlobalString("hostname")
+	if hostname == "" {
+		defer os.Exit(0)
+		log4go.Error("❌❌❌  hostname or ip can not empty, use --hostname to set.")
 	}
+	rpcport := ctx.GlobalInt("rpcport")
+	rpcserverAddr := net.JoinHostPort(hostname, strconv.Itoa(rpcport))
+	node.name = rpcserverAddr
+
 	if db, err := saradb.NewClusterDatabase(dbaddr, dbpool); err != nil {
 		if db, err = saradb.NewDatabase(dbaddr, dbpool); err != nil {
 			log4go.Error(err)
@@ -165,8 +172,16 @@ func New(ctx *cli.Context) *Node {
 	} else {
 		node.db = db
 	}
-	node.dataChannel = node.db.GenDataChannel(node.name)
+	//node.dataChannel = node.db.GenDataChannel(node.name)
+	//node.dataChannel.Subscribe(node.dataChannelHandler)
+	node.dataChannel = sararpc.NewRPCDataChannel(rpcserverAddr, 20000)
 	node.dataChannel.Subscribe(node.dataChannelHandler)
+	if rpcserver, err := sararpc.NewRPCServer(rpcserverAddr, node.dataChannel); err != nil {
+		defer os.Exit(0)
+		log4go.Error("rpcserver start fail . err=%v", err)
+	} else {
+		go func() { rpcserver.Start() }()
+	}
 	go node.clean()
 	return node
 }

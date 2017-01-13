@@ -60,18 +60,17 @@ func init() {
 }
 func main() {
 	if err := app.Run(os.Args); err != nil {
-		fmt.Println("===========")
-		fmt.Println("===========")
 		fmt.Println(err)
 	}
 }
 
 func sara(ctx *cli.Context) error {
-	log4go.Debug(">> listener on port = %s", ctx.GlobalInt("port"))
+	log4go.Debug(">> listener on port = %d", ctx.GlobalInt("port"))
 	//service.StartRPC(ctx)
 	n := node.New(ctx)
 	n.StartTCP()
 	n.StartWS()
+
 	n.Wait()
 	return nil
 }

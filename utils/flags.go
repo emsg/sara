@@ -20,8 +20,8 @@ var (
 	}
 	ListenRPCPortFlag = cli.IntFlag{
 		Name:  "rpcport",
-		Usage: "TODO:Network listening port",
-		Value: 4280,
+		Usage: "thrift rpc port",
+		Value: 4281,
 	}
 	LogfileFlag = cli.StringFlag{
 		Name:  "logfile",
@@ -42,10 +42,15 @@ var (
 		Usage: "redis pool size",
 		Value: 1000,
 	}
-	NodeFlag = cli.StringFlag{
-		Name:  "node",
-		Usage: "node name , unique  (default: uuid.hex)",
+	HostnameFlag = cli.StringFlag{
+		Name:  "hostname",
+		Usage: "unique,use for node to node transport",
 		Value: "",
+	}
+	DcFlag = cli.StringFlag{
+		Name:  "dc",
+		Usage: "TODO:datacenter name; nodekey = dc:rpchost:rpcport",
+		Value: "dc01",
 	}
 )
 
@@ -59,7 +64,8 @@ func InitFlags() []cli.Flag {
 		LogLevelFlag,
 		DBAddrFlag,
 		DBPoolFlag,
-		NodeFlag,
+		DcFlag,
+		HostnameFlag,
 	}
 }
 
