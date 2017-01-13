@@ -31,6 +31,7 @@ type Database interface {
 	Close()
 }
 
+// 作废吧，redis 做 channel 效率太低了，转到 rpc 了
 type SubHandler func(message string)
 type DataChannel interface {
 	GetChannel() string

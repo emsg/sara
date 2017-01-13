@@ -15,6 +15,11 @@ import (
 
 type DBMODEL int
 
+type writeBufArgs struct {
+	cmd  string
+	args []interface{}
+}
+
 const (
 	MODEL_CLUSTER DBMODEL = iota
 	MODEL_SINGLE
@@ -28,6 +33,16 @@ type SaraDatabase struct {
 	model    DBMODEL
 	stop     chan struct{}
 	tl       bool
+	wbCh     chan writeBufArgs
+}
+
+func (self *SaraDatabase) wbfConsumer() {
+	log4go.Info("write buffer started.")
+	for {
+		wb := <-self.wbCh
+		//log4go.Debug("<========>  wb=%s", wb)
+		self.executeDirect(wb.cmd, wb.args...)
+	}
 }
 
 func (self *SaraDatabase) getRedisClient(k string) (r *redis.Client) {
@@ -52,11 +67,14 @@ func (self *SaraDatabase) PutEx(key []byte, value []byte, ex int) error {
 }
 
 func (self *SaraDatabase) Get(key []byte) ([]byte, error) {
-	r := self.execute("GET", key)
+	r := self.executeDirect("GET", key)
 	return r.Bytes()
 }
 func (self *SaraDatabase) Delete(key []byte) error {
 	r := self.execute("DEL", key)
+	if r == nil {
+		return nil
+	}
 	return r.Err
 }
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
@@ -89,7 +107,7 @@ func (self *SaraDatabase) DeleteByIdxKey(idx, key []byte) error {
 }
 
 func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
-	if ids, err := self.execute("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
+	if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
 		return nil, err
 	} else {
 		var r [][]byte
@@ -136,6 +154,7 @@ func (self *SaraDatabase) initDb() error {
 		self.p_cli = p
 		self.model = MODEL_SINGLE
 		go self.keepalive()
+		go self.wbfConsumer()
 		return nil
 	} else {
 		return err
@@ -151,12 +170,13 @@ func (self *SaraDatabase) initClusterDb() error {
 		self.c_cli = c
 		self.model = MODEL_CLUSTER
 		go self.keepalive()
+		go self.wbfConsumer()
 		return nil
 	} else {
 		return err
 	}
 }
-func (self *SaraDatabase) execute(cmd string, args ...interface{}) (r *redis.Resp) {
+func (self *SaraDatabase) executeDirect(cmd string, args ...interface{}) (r *redis.Resp) {
 	switch self.model {
 	case MODEL_SINGLE:
 		r = self.p_cli.Cmd(cmd, args...)
@@ -165,6 +185,16 @@ func (self *SaraDatabase) execute(cmd string, args ...interface{}) (r *redis.Res
 	}
 	return
 }
+func (self *SaraDatabase) execute(cmd string, args ...interface{}) *redis.Resp {
+	//TODO 通过队列进行缓冲
+	wb := writeBufArgs{
+		cmd:  cmd,
+		args: args,
+	}
+	self.wbCh <- wb
+	return nil
+}
+
 func (self *SaraDatabase) showTestLog() {
 	self.tl = true
 }
@@ -188,6 +218,7 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
+		wbCh:     make(chan writeBufArgs, 20000),
 	}
 	if err := c.initDb(); err != nil {
 		return nil, err
@@ -200,6 +231,7 @@ func NewClusterDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
+		wbCh:     make(chan writeBufArgs, 20000),
 	}
 	if err := c.initClusterDb(); err != nil {
 		return nil, err
