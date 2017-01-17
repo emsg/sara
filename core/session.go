@@ -2,10 +2,12 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"sara/core/types"
 	"sara/saradb"
 	"sara/utils"
+	"sync"
 	"time"
 
 	"github.com/alecthomas/log4go"
@@ -53,6 +55,7 @@ func (self *SessionStatus) ToJson() []byte {
 }
 
 type Session struct {
+	wg      *sync.WaitGroup
 	Status  *SessionStatus
 	sc      SessionConn
 	packets chan []byte
@@ -97,7 +100,7 @@ func (self *Session) verify(p []byte) (packet *types.Packet, ok bool) {
 	packet, err = types.NewPacket(p)
 	if err != nil {
 		self.answer(types.NewPacketAuthFail(uuid.Rand().Hex(), types.FAIL_PACKET))
-		self.closeSession("verify_decode_packet")
+		self.CloseSession("verify_decode_packet")
 		return
 	}
 	log4go.Debug("verify = %s", packet)
@@ -105,7 +108,7 @@ func (self *Session) verify(p []byte) (packet *types.Packet, ok bool) {
 
 	if envelope.Type != types.MSG_TYPE_OPEN_SESSION {
 		self.answer(types.NewPacketAuthFail(envelope.Id, types.FAIL_TYPE))
-		self.closeSession("verify_check_msgtype")
+		self.CloseSession("verify_check_msgtype")
 		return
 	}
 	jid, pwd := envelope.Jid, envelope.Pwd
@@ -113,7 +116,7 @@ func (self *Session) verify(p []byte) (packet *types.Packet, ok bool) {
 	jid_obj, jid_err := types.NewJID(jid)
 	if jid_err != nil {
 		self.answer(types.NewPacketAuthFail(envelope.Id, types.FAIL_PACKET))
-		self.closeSession("verify_check_jid")
+		self.CloseSession("verify_check_jid")
 		return
 	}
 	// check already logon
@@ -147,7 +150,7 @@ func (self *Session) answer(packet *types.Packet) {
 func (self *Session) Kill() {
 	log4go.Info("☠️  Repeat login")
 	self.SendMessage([]byte{types.KILL})
-	self.closeSession("kill")
+	self.CloseSession("kill")
 }
 
 func (self *Session) RoutePacket(packet *types.Packet) {
@@ -182,16 +185,13 @@ func (self *Session) SendMessage(data []byte) (int, error) {
 	return self.sc.WritePacket(data)
 }
 
-func (self *Session) closeSession(tracemsg string) {
+func (self *Session) CloseSession(tracemsg string) {
 	log4go.Debug("session_close at %s ; sid=%s", tracemsg, self.Status.Sid)
 	self.clean <- self.Status.Sid
 	if self.Status.Status == types.STATUS_LOGIN {
 		j, _ := types.NewJID(self.Status.Jid)
-		//k := j.StringWithoutResource()
 		k := j.ToSessionid()
-		if err := self.ssdb.Delete(k); err != nil {
-			log4go.Error("🎀  del_error = %s", err)
-		}
+		self.ssdb.Delete(k)
 	}
 	self.Status.Status = types.STATUS_CLOSE
 	self.sc.Close()
@@ -205,6 +205,13 @@ func (self *Session) messageHandler(packet *types.Packet) {
 
 // 这个方法只能处理 c2s 的请求，并不能处理 s2s
 func (self *Session) receive() {
+	self.wg.Add(1)
+	defer func() {
+		if err := recover(); err != nil {
+			log4go.Debug("err ==> %v", err)
+		}
+		self.wg.Done()
+	}()
 	log4go.Debug("receive_started")
 	for {
 		select {
@@ -238,7 +245,7 @@ func (self *Session) receive() {
 				log4go.Debug("👀  s=>>  %s", p)
 				log4go.Debug("👀  b=>>  %b", p)
 				self.answer(types.NewPacketSysNotify(uuid.Rand().Hex(), err.Error()))
-				self.closeSession("receive_message")
+				self.CloseSession("receive_message")
 			}
 		default:
 			self.setSessionTimeout()
@@ -246,11 +253,13 @@ func (self *Session) receive() {
 				switch err.Error() {
 				case "EOF":
 					if self.Status.Status != types.STATUS_CLOSE {
-						self.closeSession("receive_eof_normal")
+						self.CloseSession("receive_eof_normal")
 					}
-				default:
+				case "TIMEOUT":
 					self.answer(types.NewPacketSysNotify(uuid.Rand().Hex(), types.FAIL_TIMEOUT))
-					self.closeSession("receive_timeout")
+					self.CloseSession("receive_timeout")
+				default:
+					self.CloseSession(fmt.Sprintf("receive_like_error: %s", err.Error()))
 				}
 				return
 			} else {
@@ -326,15 +335,15 @@ func (self *Session) serverAck(packet *types.Packet) {
 }
 
 //通过 tcp 创建 session
-func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string) *Session {
+func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sc := NewTcpSessionConn(conn)
-	return newSession(c, sc, ssdb, node, cleanSession)
+	return newSession(c, sc, ssdb, node, cleanSession, wg)
 }
 
 //通过 websocket 创建 session
-func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string) *Session {
+func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sc := NewWsSessionConn(conn)
-	return newSession(c, sc, ssdb, node, cleanSession)
+	return newSession(c, sc, ssdb, node, cleanSession, wg)
 }
 
 //TODO 通过 tls 创建 session
@@ -342,9 +351,10 @@ func NewTlsSession() {
 
 }
 
-func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string) *Session {
+func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sid := uuid.Rand().Hex()
 	session := &Session{
+		wg:      wg,
 		Status:  &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Channel: c},
 		clean:   cleanSession,
 		ssdb:    ssdb,

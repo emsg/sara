@@ -11,6 +11,7 @@ import (
 	"sara/saradb"
 	"sara/sararpc"
 	"strconv"
+	"sync"
 
 	"github.com/alecthomas/log4go"
 	"github.com/gorilla/websocket"
@@ -18,10 +19,11 @@ import (
 )
 
 type Node struct {
+	wg                    *sync.WaitGroup
 	name                  string
 	sessionMap            map[string]*core.Session //all avaliable session
 	Port, SSLPort, WSPort int
-	stop                  chan struct{}
+	stop                  chan chan int
 	cleanSession          chan string
 	tcpListen             *net.TCPListener
 	db                    saradb.Database //SessionStatus db
@@ -54,15 +56,30 @@ func (self *Node) StartTCP() error {
 }
 
 func (self *Node) Wait() {
-	defer self.tcpListen.Close()
-	stop := self.stop
 	if self.tcpListen == nil {
 		return
 	}
-	<-stop
+	k := <-self.stop
+	//shutdown
+	for _, s := range self.sessionMap {
+		s.CloseSession("node_stop")
+	}
+	log4go.Info("node shutdown success.")
+	self.wg.Wait()
+	k <- 1
+}
+
+func (self *Node) Stop() {
+	k := make(chan int)
+	self.stop <- k
+	<-k
+	defer self.tcpListen.Close()
 }
 
 func (self *Node) clean() {
+	defer func() {
+		recover()
+	}()
 	for sid := range self.cleanSession {
 		log4go.Debug("clean_session sid=%s", sid)
 		delete(self.sessionMap, sid)
@@ -112,7 +129,7 @@ func (self *Node) acceptTCP() {
 		//if conn, err := self.tcpListen.Accept(); err == nil {
 		if conn, err := self.tcpListen.AcceptTCP(); err == nil {
 			//conn.SetKeepAlive(true)
-			self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession))
+			self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession, self.wg))
 		}
 	}
 }
@@ -125,7 +142,7 @@ func (self *Node) acceptWs(w http.ResponseWriter, r *http.Request) {
 	}
 	log4go.Debug("🌍  >>> upgrade success")
 	c := self.dataChannel.GetChannel()
-	self.registerSession(core.NewWsSession(c, conn, self.db, self, self.cleanSession))
+	self.registerSession(core.NewWsSession(c, conn, self.db, self, self.cleanSession, self.wg))
 }
 
 func (self *Node) dataChannelHandler(message string) {
@@ -148,10 +165,12 @@ func (self *Node) dataChannelHandler(message string) {
 
 func New(ctx *cli.Context) *Node {
 	node := &Node{
+		wg:           &sync.WaitGroup{},
 		sessionMap:   make(map[string]*core.Session),
 		cleanSession: make(chan string, 4096),
 		Port:         config.GetInt("port", 4222),   //ctx.GlobalInt("port"),
 		WSPort:       config.GetInt("wsport", 4224), //ctx.GlobalInt("wsport"),
+		stop:         make(chan chan int),
 	}
 	dbaddr := config.GetString("dbaddr", "localhost:6379")
 	dbpool := config.GetInt("dbpool", 100)

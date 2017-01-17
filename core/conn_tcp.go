@@ -2,10 +2,9 @@ package core
 
 import (
 	"errors"
+	"github.com/alecthomas/log4go"
 	"net"
 	"time"
-
-	"github.com/alecthomas/log4go"
 )
 
 type TcpSessionConn struct {
@@ -19,12 +18,19 @@ func (self *TcpSessionConn) SetReadTimeout(timeout time.Time) {
 func (self *TcpSessionConn) ReadPacket(part []byte) (packetList [][]byte, newPart []byte, e error) {
 	buff := make([]byte, 256)
 	if _, err := self.conn.Read(buff); err != nil {
-		log4go.Error("❌❌  err=%s , et=%t", err.Error(), err)
 		switch err.(type) {
 		case *net.OpError:
-			e = errors.New("TIMEOUT")
+			ne := err.(*net.OpError)
+			if ne.Timeout() {
+				// socket timeout
+				e = errors.New("TIMEOUT")
+			} else {
+				// server socket close or others
+				e = errors.New(ne.Error())
+			}
 		default:
-			e = errors.New("EOF")
+			// EOF, normal
+			e = err
 		}
 	} else {
 		packetList, newPart, _ = DecodePacket(buff, part)
@@ -32,8 +38,15 @@ func (self *TcpSessionConn) ReadPacket(part []byte) (packetList [][]byte, newPar
 	return
 }
 
-func (self *TcpSessionConn) WritePacket(packet []byte) (int, error) {
-	return self.conn.Write(packet)
+func (self *TcpSessionConn) WritePacket(packet []byte) (i int, e error) {
+	defer func() {
+		if err := recover(); err != nil {
+			log4go.Debug(err)
+			i, e = 0, errors.New(err.(string))
+		}
+	}()
+	i, e = self.conn.Write(packet)
+	return
 }
 
 func (self *TcpSessionConn) Close() {

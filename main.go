@@ -22,11 +22,12 @@ import (
 )
 
 var (
-	logLevel []log4go.Level = []log4go.Level{log4go.ERROR, log4go.WARNING, log4go.INFO, log4go.DEBUG}
-	app      *cli.App
-	cpu_log  string = "/tmp/sara_cpu.out"
-	mem_log  string = "/tmp/sara_mem.out"
-	pidf     string = "/tmp/sara.pid"
+	logLevel    []log4go.Level = []log4go.Level{log4go.ERROR, log4go.WARNING, log4go.INFO, log4go.DEBUG}
+	app         *cli.App
+	cpu_log     string = "/tmp/sara_cpu.out"
+	mem_log     string = "/tmp/sara_mem.out"
+	pidf        string = "/tmp/sara.pid"
+	currentnode *node.Node
 )
 
 func init() {
@@ -43,6 +44,11 @@ func init() {
 	app.Flags = utils.InitFlags()
 	app.Action = sara
 	app.Commands = []cli.Command{
+		{
+			Name:   "stop",
+			Usage:  "停止服务，尽量避免直接 kill 服务",
+			Action: stop,
+		},
 		{
 			Name:     "makeconn",
 			Usage:    "创建指定个数的连接，测试最大连接数",
@@ -68,26 +74,12 @@ func init() {
 		}
 		log4go.AddFilter("stdout", log4go.Level(level), log4go.NewConsoleLogWriter())
 		// init config
-		if ctx.GlobalString("hostname") == "" {
-			defer os.Exit(0)
-			log4go.Error("❌❌❌  hostname or ip can not empty, use --hostname to set.")
-		}
 		config.LoadFromCtx(ctx)
 		// init pprof
 		if ctx.GlobalBool("debug") {
 			log4go.Warn("start collection cpu and mem profile ... ")
 			startCpuProfiles()
 			startMemProfiles()
-			go func() {
-				c := make(chan os.Signal)
-				signal.Notify(c, syscall.SIGUSR1)
-				for sig := range c {
-					log4go.Warn(" 📶  %v", sig)
-					stopCpuProfiles()
-					stopMemProfiles()
-					log4go.Warn("stop collection cpu and mem profile ... ")
-				}
-			}()
 		}
 		return nil
 	}
@@ -104,12 +96,13 @@ func main() {
 
 func sara(ctx *cli.Context) error {
 	//log4go.Debug(">> listener on port = %d", config.GetInt("port", 4222))
-	//service.StartRPC(ctx)
-	n := node.New(ctx)
-	n.StartTCP()
-	n.StartWS()
+	signalHandler(ctx)
+	currentnode = node.New(ctx)
+	currentnode.StartTCP()
+	currentnode.StartWS()
 	savePid()
-	n.Wait()
+	currentnode.Wait()
+	log4go.Info("👋  server shutdown success.")
 	return nil
 }
 
@@ -141,6 +134,23 @@ func pprofForDebug(ctx *cli.Context) error {
 	return err
 }
 
+func stop(ctx *cli.Context) error {
+	b, err := ioutil.ReadFile(pidf)
+	if err == nil {
+		pid, _ := strconv.Atoi(string(b))
+		log4go.Debug("sara_pid==>%d", pid)
+		p, e := os.FindProcess(pid)
+		if e != nil {
+			return e
+		}
+		if e := p.Signal(syscall.SIGINT); e != nil {
+			return e
+		}
+		log4go.Info("server shutdown success.")
+	}
+	return nil
+}
+
 func startCpuProfiles() {
 	f, _ := os.Create(cpu_log)
 	if err := pprof.StartCPUProfile(f); err != nil {
@@ -170,4 +180,28 @@ func savePid() {
 		defer f.Close()
 		f.WriteString(fmt.Sprintf("%d", pid))
 	}
+}
+
+//处理信号量
+func signalHandler(ctx *cli.Context) {
+	go func() {
+		c := make(chan os.Signal)
+		signal.Notify(c)
+		//signal.Notify(c, syscall.SIGUSR1, syscall.SIGKILL)
+		for sig := range c {
+			log4go.Warn("signal: %v", sig)
+			switch sig {
+			case syscall.SIGUSR1:
+				if ctx.GlobalBool("debug") {
+					stopCpuProfiles()
+					stopMemProfiles()
+					log4go.Warn("stop collection cpu and mem profile ... ")
+				}
+			case syscall.SIGTSTP:
+			case syscall.SIGINT:
+				fmt.Println("stop server.")
+				currentnode.Stop()
+			}
+		}
+	}()
 }
