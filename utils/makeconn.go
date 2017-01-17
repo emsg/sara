@@ -79,7 +79,8 @@ func genTcp() {
 }
 
 // test conn
-func MakeConn(addr string, total int) {
+func MakeConn(addr string, total, hb int) {
+	heartbeat = hb
 	go genTcp()
 	for i := 0; i < total; i++ {
 		addrQueue <- addr
@@ -87,7 +88,7 @@ func MakeConn(addr string, total int) {
 	for {
 		select {
 		case <-time.After(time.Second * time.Duration(5)):
-			fmt.Println(time.Now(), "total:", total, "success:", success, "❤️", heartbeat)
+			fmt.Println(time.Now(), "total:", total, "success:", success, heartbeat)
 		case <-stop:
 			return
 		}

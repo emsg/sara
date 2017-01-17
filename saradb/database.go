@@ -37,12 +37,21 @@ type SaraDatabase struct {
 }
 
 func (self *SaraDatabase) wbfConsumer() {
-	log4go.Info("write buffer started.")
-	for {
-		wb := <-self.wbCh
-		//log4go.Debug("<========>  wb=%s", wb)
-		self.executeDirect(wb.cmd, wb.args...)
+	consumerTotal := 2
+	if self.PoolSize > 30 {
+		consumerTotal = self.PoolSize / 10
 	}
+	log4go.Info("write buffer started ; total consume [%d]", consumerTotal)
+	for i := 0; i < consumerTotal; i++ {
+		go func(tid string) {
+			for {
+				wb := <-self.wbCh
+				//log4go.Debug("wbf_consumer [%s] wb=%s", tid, wb)
+				self.executeDirect(wb.cmd, wb.args...)
+			}
+		}(fmt.Sprintf("t-%d", i))
+	}
+
 }
 
 func (self *SaraDatabase) getRedisClient(k string) (r *redis.Client) {
@@ -72,18 +81,18 @@ func (self *SaraDatabase) Get(key []byte) ([]byte, error) {
 }
 func (self *SaraDatabase) Delete(key []byte) error {
 	r := self.execute("DEL", key)
-	if r == nil {
-		return nil
+	if r != nil && r.Err != nil {
+		return r.Err
 	}
-	return r.Err
+	return nil
 }
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	r := self.execute("ZADD", idx, utils.Timestamp13(), key)
-	if r.Err != nil {
+	if r != nil && r.Err != nil {
 		return r.Err
 	}
 	r = self.execute("SETEX", key, ex, value)
-	if r.Err != nil {
+	if r != nil && r.Err != nil {
 		return r.Err
 	}
 	return nil

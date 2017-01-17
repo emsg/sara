@@ -1,9 +1,6 @@
 package core
 
-import (
-	"errors"
-	"github.com/alecthomas/log4go"
-)
+import "errors"
 
 var ofl_cache *offline_message_cache
 
@@ -29,6 +26,5 @@ func (self *offline_message_cache) put(key string, val []string) {
 }
 
 func init() {
-	log4go.Debug("📦  ofl_cache started...")
 	ofl_cache = &offline_message_cache{cache: make(map[string][]string)}
 }

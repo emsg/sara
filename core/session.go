@@ -81,7 +81,7 @@ func (self *Session) openSession(p []byte) {
 				ofl_cache.put(envelope.Id, ofl_ids)
 			}
 		}
-		log4go.Info("login jid=%s , pwd=%s , %s", jid, pwd, p)
+		log4go.Debug("login jid=%s , pwd=%s , %s", jid, pwd, p)
 		self.storeSessionStatus()
 		self.answer(p)
 	}

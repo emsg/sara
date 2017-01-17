@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sara/config"
 	"sara/core"
 	"sara/core/types"
 	"sara/saradb"
@@ -22,7 +23,7 @@ type Node struct {
 	Port, SSLPort, WSPort int
 	stop                  chan struct{}
 	cleanSession          chan string
-	tcpListen             net.Listener
+	tcpListen             *net.TCPListener
 	db                    saradb.Database //SessionStatus db
 	dataChannel           sararpc.DataChannel
 }
@@ -108,7 +109,9 @@ func (self *Node) acceptTCP() {
 	c := self.dataChannel.GetChannel()
 	for {
 		// 阻塞在这里，
-		if conn, err := self.tcpListen.Accept(); err == nil {
+		//if conn, err := self.tcpListen.Accept(); err == nil {
+		if conn, err := self.tcpListen.AcceptTCP(); err == nil {
+			//conn.SetKeepAlive(true)
 			self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession))
 		}
 	}
@@ -147,17 +150,13 @@ func New(ctx *cli.Context) *Node {
 	node := &Node{
 		sessionMap:   make(map[string]*core.Session),
 		cleanSession: make(chan string, 4096),
-		Port:         ctx.GlobalInt("port"),
-		WSPort:       ctx.GlobalInt("wsport"),
+		Port:         config.GetInt("port", 4222),   //ctx.GlobalInt("port"),
+		WSPort:       config.GetInt("wsport", 4224), //ctx.GlobalInt("wsport"),
 	}
-	dbaddr := ctx.GlobalString("dbaddr")
-	dbpool := ctx.GlobalInt("dbpool")
+	dbaddr := config.GetString("dbaddr", "localhost:6379")
+	dbpool := config.GetInt("dbpool", 100)
 
-	hostname := ctx.GlobalString("hostname")
-	if hostname == "" {
-		defer os.Exit(0)
-		log4go.Error("❌❌❌  hostname or ip can not empty, use --hostname to set.")
-	}
+	hostname := config.GetString("hostname", "localhost")
 	rpcport := ctx.GlobalInt("rpcport")
 	rpcserverAddr := net.JoinHostPort(hostname, strconv.Itoa(rpcport))
 	node.name = rpcserverAddr

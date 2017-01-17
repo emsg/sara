@@ -1,56 +1,62 @@
 package utils
 
 import "github.com/urfave/cli"
+import "sara/config"
 
 var (
 	ListenPortFlag = cli.IntFlag{
 		Name:  "port",
 		Usage: "Network listening port",
-		Value: 4222,
+		Value: config.GetDef("port").(int),
 	}
 	ListenWSPortFlag = cli.IntFlag{
 		Name:  "wsport",
 		Usage: "Network listening websocket port",
-		Value: 4224,
+		Value: config.GetDef("wsport").(int),
 	}
 	ListenSSLPortFlag = cli.IntFlag{
 		Name:  "sslport",
 		Usage: "TODO:Network listening port",
-		Value: 4333,
+		Value: config.GetDef("sslport").(int),
 	}
 	ListenRPCPortFlag = cli.IntFlag{
 		Name:  "rpcport",
 		Usage: "thrift rpc port",
-		Value: 4281,
+		Value: config.GetDef("rpcport").(int),
 	}
 	LogfileFlag = cli.StringFlag{
 		Name:  "logfile",
 		Usage: "log file path",
+		Value: config.GetDef("logfile").(string),
 	}
 	LogLevelFlag = cli.IntFlag{
 		Name:  "loglevel",
 		Usage: "0=errr, 1=warn, 2=info, 3=debug",
-		Value: 3,
+		Value: config.GetDef("loglevel").(int),
 	}
 	DBAddrFlag = cli.StringFlag{
 		Name:  "dbaddr",
 		Usage: "redis addr,format as ip:port ",
-		Value: "localhost:6379",
+		Value: config.GetDef("dbaddr").(string),
 	}
 	DBPoolFlag = cli.IntFlag{
 		Name:  "dbpool",
 		Usage: "redis pool size",
-		Value: 1000,
+		Value: config.GetDef("dbpool").(int),
 	}
 	HostnameFlag = cli.StringFlag{
 		Name:  "hostname",
 		Usage: "unique,use for node to node transport",
-		Value: "",
+		Value: config.GetDef("hostname").(string),
 	}
 	DcFlag = cli.StringFlag{
 		Name:  "dc",
 		Usage: "TODO:datacenter name; nodekey = dc:rpchost:rpcport",
-		Value: "dc01",
+		Value: config.GetDef("dc").(string),
+	}
+	DebugFlag = cli.BoolFlag{
+		Name:  "debug",
+		Usage: "write 'pprof' info to /tmp/sara_cpu.out and /tmp/sara_mem.out",
 	}
 )
 
@@ -64,8 +70,9 @@ func InitFlags() []cli.Flag {
 		LogLevelFlag,
 		DBAddrFlag,
 		DBPoolFlag,
-		DcFlag,
 		HostnameFlag,
+		DcFlag,
+		DebugFlag,
 	}
 }
 
@@ -80,6 +87,11 @@ var (
 		Usage: "host:port",
 		Value: "localhost:4222",
 	}
+	HbType = cli.IntFlag{
+		Name:  "heartbeat,b",
+		Usage: "second",
+		Value: 50,
+	}
 	ConnType = cli.IntFlag{
 		Name:  "conn_type",
 		Usage: "0 tcp,1 ws,2 ssl,3 wss",
@@ -91,6 +103,7 @@ func InitFlagsForTestOfMakeConn() []cli.Flag {
 	return []cli.Flag{
 		Total,
 		Addr,
+		HbType,
 		ConnType,
 	}
 }
