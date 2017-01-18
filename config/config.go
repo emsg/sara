@@ -2,7 +2,10 @@ package config
 
 import (
 	"fmt"
+	"io/ioutil"
 
+	"github.com/alecthomas/log4go"
+	"github.com/tidwall/gjson"
 	"github.com/urfave/cli"
 )
 
@@ -10,13 +13,13 @@ var configs []ConfVo = []ConfVo{
 	newConfVoKeyDef("port", 4222),
 	newConfVoKeyDef("wsport", 4224),
 	newConfVoKeyDef("sslport", 4333),
-	newConfVoKeyDef("rpcport", 4281),
 	newConfVoKeyDef("logfile", "/tmp/sara.log"),
-	newConfVoKeyDef("loglevel", 3),              //0=errr, 1=warn, 2=info, 3=debug
-	newConfVoKeyDef("dbaddr", "localhost:6379"), // redis
-	newConfVoKeyDef("dbpool", 1000),             // redis pool size
-	newConfVoKeyDef("hostname", "localhost"),    //unique,use for node to node rpc transport
-	newConfVoKeyDef("dc", "dc01"),               //TODO :datacenter name; nodekey = dc:rpchost:rpcport
+	newConfVoKeyDef("loglevel", 3),                //0=errr, 1=warn, 2=info, 3=debug
+	newConfVoKeyDef("dbaddr", "localhost:6379"),   // redis
+	newConfVoKeyDef("dbpool", 1000),               // redis pool size
+	newConfVoKeyDef("nodeaddr", "localhost:4281"), //unique,use for node to node rpc transport
+	newConfVoKeyDef("callback", ""),               //callbackurl,for auth、offline notify、fetch group users
+	newConfVoKeyDef("dc", "dc01"),                 //TODO :datacenter name; nodekey = dc:hostname
 }
 
 var conf map[string]ConfVo = make(map[string]ConfVo)
@@ -83,19 +86,60 @@ func GetDef(k string) interface{} {
 	return nil
 }
 
-func LoadFromConsul(addr string) {
-
+func LoadFromConf(c *cli.Context) {
+	addr := c.GlobalString("config")
+	buf, err := ioutil.ReadFile(addr)
+	if err != nil {
+		log4go.Error(err)
+		return
+	}
+	j := string(buf)
+	log4go.Debug("config= %s", j)
+	if r := gjson.Get(j, "port"); r.Exists() {
+		SetInt("port", int(r.Int()))
+	}
+	if r := gjson.Get(j, "wsport"); r.Exists() {
+		SetInt("wsport", int(r.Int()))
+	}
+	if r := gjson.Get(j, "sslport"); r.Exists() {
+		SetInt("sslport", int(r.Int()))
+	}
+	if r := gjson.Get(j, "logfile"); r.Exists() {
+		SetString("logfile", r.String())
+	}
+	if r := gjson.Get(j, "loglevel"); r.Exists() {
+		SetInt("loglevel", int(r.Int()))
+	}
+	if r := gjson.Get(j, "dbaddr"); r.Exists() {
+		SetString("dbaddr", r.String())
+	}
+	if r := gjson.Get(j, "dbpool"); r.Exists() {
+		SetInt("dbpool", int(r.Int()))
+	}
+	if r := gjson.Get(j, "nodeaddr"); r.Exists() {
+		SetString("nodeaddr", r.String())
+	}
+	if r := gjson.Get(j, "callback"); r.Exists() {
+		SetString("callback", r.String())
+	}
+	if r := gjson.Get(j, "dc"); r.Exists() {
+		SetString("dc", r.String())
+	}
 }
 
 func LoadFromCtx(ctx *cli.Context) {
 	SetInt("port", ctx.GlobalInt("port"))
 	SetInt("wsport", ctx.GlobalInt("wsport"))
 	SetInt("sslport", ctx.GlobalInt("sslport"))
-	SetInt("rpcport", ctx.GlobalInt("rpcport"))
 	SetString("logfile", ctx.GlobalString("logfile"))
 	SetInt("loglevel", ctx.GlobalInt("loglevel"))
 	SetString("dbaddr", ctx.GlobalString("dbaddr"))
 	SetInt("dbpool", ctx.GlobalInt("dbpool"))
-	SetString("hostname", ctx.GlobalString("hostname"))
+	SetString("nodeaddr", ctx.GlobalString("nodeaddr"))
+	SetString("callback", ctx.GlobalString("callback"))
 	SetString("dc", ctx.GlobalString("dc"))
+}
+func Load(ctx *cli.Context) {
+	LoadFromCtx(ctx)
+	LoadFromConf(ctx)
 }

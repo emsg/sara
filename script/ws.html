@@ -3,6 +3,7 @@
 <button onclick="login()">login</button><br/>
 <button onclick="heartbeat()">heart beat</button><br/>
 <button onclick="sendMessage()">send message</button><br/>
+<button onclick="closeWs()">close conn</button><br/>
 </html>
 
 <script>
@@ -37,5 +38,8 @@ function login(){
 }
 function heartbeat(){
     ws.send("\02");
+}
+function closeWs(){
+    ws.close();
 }
 </script>

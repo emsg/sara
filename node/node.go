@@ -10,7 +10,6 @@ import (
 	"sara/core/types"
 	"sara/saradb"
 	"sara/sararpc"
-	"strconv"
 	"sync"
 
 	"github.com/alecthomas/log4go"
@@ -175,9 +174,7 @@ func New(ctx *cli.Context) *Node {
 	dbaddr := config.GetString("dbaddr", "localhost:6379")
 	dbpool := config.GetInt("dbpool", 100)
 
-	hostname := config.GetString("hostname", "localhost")
-	rpcport := ctx.GlobalInt("rpcport")
-	rpcserverAddr := net.JoinHostPort(hostname, strconv.Itoa(rpcport))
+	rpcserverAddr := config.GetString("nodeaddr", "localhost:4281")
 	node.name = rpcserverAddr
 
 	if db, err := saradb.NewClusterDatabase(dbaddr, dbpool); err != nil {

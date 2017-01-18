@@ -1,0 +1,12 @@
+{
+    "port": 5222,
+    "wsport": 4224,
+    "sslport": 4333,
+    "dbaddr": "localhost:6379",
+    "dbpool":1000,
+    "callback":"",
+    "nodeaddr": "localhost:4281",
+    "logfile":"/tmp/sara.log",
+    "loglevel":3,
+    "dc":"dc01"
+}

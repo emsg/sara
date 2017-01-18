@@ -74,7 +74,7 @@ func init() {
 		}
 		log4go.AddFilter("stdout", log4go.Level(level), log4go.NewConsoleLogWriter())
 		// init config
-		config.LoadFromCtx(ctx)
+		config.Load(ctx)
 		// init pprof
 		if ctx.GlobalBool("debug") {
 			log4go.Warn("start collection cpu and mem profile ... ")
@@ -189,7 +189,7 @@ func signalHandler(ctx *cli.Context) {
 		signal.Notify(c)
 		//signal.Notify(c, syscall.SIGUSR1, syscall.SIGKILL)
 		for sig := range c {
-			log4go.Warn("signal: %v", sig)
+			//log4go.Warn("signal: %v", sig)
 			switch sig {
 			case syscall.SIGUSR1:
 				if ctx.GlobalBool("debug") {

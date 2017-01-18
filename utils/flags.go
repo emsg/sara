@@ -19,11 +19,6 @@ var (
 		Usage: "TODO:Network listening port",
 		Value: config.GetDef("sslport").(int),
 	}
-	ListenRPCPortFlag = cli.IntFlag{
-		Name:  "rpcport",
-		Usage: "thrift rpc port",
-		Value: config.GetDef("rpcport").(int),
-	}
 	LogfileFlag = cli.StringFlag{
 		Name:  "logfile",
 		Usage: "log file path",
@@ -44,19 +39,28 @@ var (
 		Usage: "redis pool size",
 		Value: config.GetDef("dbpool").(int),
 	}
-	HostnameFlag = cli.StringFlag{
-		Name:  "hostname",
+	NodeaddrFlag = cli.StringFlag{
+		Name:  "nodeaddr,n",
 		Usage: "unique,use for node to node transport",
-		Value: config.GetDef("hostname").(string),
+		Value: config.GetDef("nodeaddr").(string),
 	}
 	DcFlag = cli.StringFlag{
 		Name:  "dc",
-		Usage: "TODO:datacenter name; nodekey = dc:rpchost:rpcport",
+		Usage: "TODO:datacenter name; nodekey = dc:nodeaddr",
 		Value: config.GetDef("dc").(string),
+	}
+	CallbackFlag = cli.StringFlag{
+		Name:  "callback",
+		Usage: "callbackurl,for auth、offline notify、fetch group users",
 	}
 	DebugFlag = cli.BoolFlag{
 		Name:  "debug",
 		Usage: "write 'pprof' info to /tmp/sara_cpu.out and /tmp/sara_mem.out",
+	}
+	ConfigFlag = cli.StringFlag{
+		Name:  "config",
+		Usage: "cmd-line first, config second ",
+		Value: "/etc/sara/conf.json",
 	}
 )
 
@@ -65,14 +69,15 @@ func InitFlags() []cli.Flag {
 		ListenPortFlag,
 		ListenWSPortFlag,
 		ListenSSLPortFlag,
-		ListenRPCPortFlag,
 		LogfileFlag,
 		LogLevelFlag,
 		DBAddrFlag,
 		DBPoolFlag,
-		HostnameFlag,
+		NodeaddrFlag,
 		DcFlag,
+		CallbackFlag,
 		DebugFlag,
+		ConfigFlag,
 	}
 }
 

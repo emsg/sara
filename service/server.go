@@ -2,8 +2,8 @@ package service
 
 import (
 	"github.com/alecthomas/log4go"
+	"github.com/cc14514/go-lightrpc/rpcserver"
 	"github.com/urfave/cli"
-	"go-lightrpc/rpcserver"
 )
 
 func StartRPC(ctx *cli.Context) error {

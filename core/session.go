@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sara/core/types"
+	"sara/external"
 	"sara/saradb"
 	"sara/utils"
 	"sync"
@@ -126,8 +127,13 @@ func (self *Session) verify(p []byte) (packet *types.Packet, ok bool) {
 		//默认踢掉前一个
 		self.node.Route(ss.Channel, ss.Sid, nil, types.KILL)
 	}
-	//TODO callback_service.auth
+	//callback_service.auth
 	log4go.Debug("verify_auth jid=%s , pwd=%s", jid, pwd)
+	if !external.Auth(jid_obj.GetUser(), pwd) {
+		self.answer(types.NewPacketAuthFail(envelope.Id, types.FAIL_TOKEN))
+		self.CloseSession("verify_check_auth")
+		return
+	}
 	ok = true
 	return
 }
@@ -174,7 +180,9 @@ func (self *Session) RoutePacket(packet *types.Packet) {
 				self.node.Route(ss.Channel, ss.Sid, packet)
 				log4go.Debug("✉️  %s->%s", to_key, ssb)
 			} else {
+				//offline line message
 				log4go.Debug("📮  %s", to_key)
+				external.OfflineCallback(string(packet.ToJson()))
 			}
 		}
 	}
@@ -259,7 +267,9 @@ func (self *Session) receive() {
 					self.answer(types.NewPacketSysNotify(uuid.Rand().Hex(), types.FAIL_TIMEOUT))
 					self.CloseSession("receive_timeout")
 				default:
-					self.CloseSession(fmt.Sprintf("receive_like_error: %s", err.Error()))
+					if self.Status.Status != types.STATUS_CLOSE {
+						self.CloseSession(fmt.Sprintf("receive_like_error: %s", err.Error()))
+					}
 				}
 				return
 			} else {
