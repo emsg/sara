@@ -1,5 +1,5 @@
 {
-    "port": 5222,
+    "port": 4222,
     "wsport": 4224,
     "sslport": 4333,
     "dbaddr": "localhost:6379",

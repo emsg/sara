@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 
 	"github.com/alecthomas/log4go"
 	"github.com/tidwall/gjson"
@@ -45,7 +46,7 @@ func newConfVoKeyVal(key string, val interface{}) ConfVo {
 
 func init() {
 	for _, c := range configs {
-		fmt.Println(c.Key, c.Def)
+		//fmt.Println(c.Key, c.Def)
 		conf[c.Key] = c
 	}
 }
@@ -90,11 +91,17 @@ func LoadFromConf(c *cli.Context) {
 	addr := c.GlobalString("config")
 	buf, err := ioutil.ReadFile(addr)
 	if err != nil {
-		log4go.Error(err)
+		//log4go.Error(err)
 		return
 	}
 	j := string(buf)
 	log4go.Debug("config= %s", j)
+	if r := gjson.Get(j, "nodeid"); r.Exists() && r.String() != "" {
+		SetString("nodeid", r.String())
+	} else if nid := GetString("nodeid", ""); nid == "" {
+		fmt.Println("⚠️  nodeid can not empty")
+		os.Exit(0)
+	}
 	if r := gjson.Get(j, "port"); r.Exists() {
 		SetInt("port", int(r.Int()))
 	}
@@ -138,8 +145,25 @@ func LoadFromCtx(ctx *cli.Context) {
 	SetString("nodeaddr", ctx.GlobalString("nodeaddr"))
 	SetString("callback", ctx.GlobalString("callback"))
 	SetString("dc", ctx.GlobalString("dc"))
+	SetString("nodeid", ctx.GlobalString("nodeid"))
 }
 func Load(ctx *cli.Context) {
 	LoadFromCtx(ctx)
 	LoadFromConf(ctx)
 }
+
+var Template string = `
+{
+    "port": 4222,
+    "wsport": 4224,
+    "sslport": 4333,
+	"nodeid":"n01",
+    "dbaddr": "localhost:6379",
+    "dbpool":100,
+    "callback":"",
+    "nodeaddr": "localhost:4281",
+    "logfile":"/tmp/sara.log",
+    "loglevel":3,
+    "dc":"dc01"
+}
+`

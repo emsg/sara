@@ -2,19 +2,24 @@ package utils
 
 import (
 	"fmt"
-	"net"
-	"time"
-
 	"github.com/golibs/uuid"
 	"github.com/tidwall/gjson"
+	"net"
+	"runtime"
+	"sync"
+	"time"
 )
 
 var (
-	success   int           = 0
-	heartbeat int           = 200
-	stop      chan struct{} = make(chan struct{})
-	addrQueue chan string   = make(chan string, 100)
-	sfpacket  string        = `{"envelope":{"pwd":"123","jid":"%s@a.a","type":0,"id":"%s"},"vsn":"0.0.1"}`
+	wg              *sync.WaitGroup = new(sync.WaitGroup)
+	fail            int             = 0
+	heartbeat       int             = 50
+	stop            chan struct{}   = make(chan struct{})
+	addrQueue       chan string     = make(chan string, 100)
+	finish          chan int64      = make(chan int64)
+	localAddr       string
+	sfpacket        string = `{"envelope":{"pwd":"123","jid":"%s@a.a","type":0,"id":"%s"},"vsn":"0.0.1"}`
+	localPortPoolCh chan int
 )
 
 type client struct {
@@ -56,7 +61,17 @@ func (self *client) start() {
 }
 
 func newClient(addr string) (*client, error) {
-	if conn, err := net.DialTimeout("tcp", addr, 3*time.Second); err != nil {
+	var conn net.Conn
+	var err error
+	if localAddr == "" {
+		conn, err = net.DialTimeout("tcp", addr, 3*time.Second)
+	} else {
+		lport := <-localPortPoolCh
+		laddr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", localAddr, lport))
+		raddr, _ := net.ResolveTCPAddr("tcp", addr)
+		conn, err = net.DialTCP("tcp", laddr, raddr)
+	}
+	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	} else {
@@ -72,25 +87,39 @@ func newClient(addr string) (*client, error) {
 
 func genTcp() {
 	for addr := range addrQueue {
-		if _, e := newClient(addr); e == nil {
-			success += 1
+		if _, e := newClient(addr); e != nil {
+			fail += 1
 		}
+		wg.Done()
 	}
 }
 
 // test conn
-func MakeConn(addr string, total, hb int) {
+func MakeConn(laddr, addr string, total, hb int) {
+	fmt.Println(laddr, addr, total, hb)
+	localAddr = laddr
+	if laddr != "" {
+		localPortPoolCh = make(chan int, 65535)
+		for i := 65535; i > 65535-total-100; i-- {
+			localPortPoolCh <- i
+		}
+	}
 	heartbeat = hb
-	go genTcp()
+	cpu := runtime.NumCPU()
+	runtime.GOMAXPROCS(cpu)
+	for i := 0; i < cpu*2; i++ {
+		go genTcp()
+	}
+	s := time.Now().UnixNano() / 1000000
+	wg.Add(total)
 	for i := 0; i < total; i++ {
 		addrQueue <- addr
 	}
-	for {
-		select {
-		case <-time.After(time.Second * time.Duration(5)):
-			fmt.Println(time.Now(), "total:", total, "success:", success, heartbeat)
-		case <-stop:
-			return
-		}
-	}
+	wg.Wait()
+	e := time.Now().UnixNano() / 1000000
+	fmt.Println("cpu core:", cpu, " worker:", cpu*2)
+	fmt.Println("😊  total:", total, "finished , fail:", fail, " time:", (e - s), "ms. heartbeat:", hb)
+	close(addrQueue)
+	close(finish)
+	<-stop
 }

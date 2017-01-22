@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sara/config"
 	"sara/core/types"
 	"sara/external"
 	"sara/saradb"
@@ -33,7 +34,7 @@ type MessageRouter interface {
 
 const (
 	LOGIN_TIMEOUT   int    = 5
-	SESSION_TIMEOUT        = 300
+	SESSION_TIMEOUT        = 120
 	OFFLINE_EXPIRED        = 3600 * 24 * 7 //default 7days
 	SERVER_ACK      string = "server_ack"
 )
@@ -42,6 +43,7 @@ type SessionStatus struct {
 	Sid     string
 	Jid     string
 	Status  string
+	Nodeid  string
 	Channel string
 	Ct      int64
 }
@@ -199,7 +201,8 @@ func (self *Session) CloseSession(tracemsg string) {
 	if self.Status.Status == types.STATUS_LOGIN {
 		j, _ := types.NewJID(self.Status.Jid)
 		k := j.ToSessionid()
-		self.ssdb.Delete(k)
+		idx := []byte(self.Status.Nodeid)
+		self.ssdb.DeleteByIdxKey(idx, k)
 	}
 	self.Status.Status = types.STATUS_CLOSE
 	self.sc.Close()
@@ -216,7 +219,7 @@ func (self *Session) receive() {
 	self.wg.Add(1)
 	defer func() {
 		if err := recover(); err != nil {
-			log4go.Debug("err ==> %v", err)
+			log4go.Error("err ==> %v", err)
 		}
 		self.wg.Done()
 	}()
@@ -297,7 +300,8 @@ func (self *Session) storeSessionStatus() {
 	key := j.ToSessionid()
 	val := self.Status.ToJson()
 	//log4go.Debug("storeSessionStatus-> %s", val)
-	self.ssdb.PutEx(key, val, SESSION_TIMEOUT)
+	idx := []byte(self.Status.Nodeid)
+	self.ssdb.PutExWithIdx(idx, key, val, SESSION_TIMEOUT)
 }
 
 //所有消息都先存储起来
@@ -363,9 +367,10 @@ func NewTlsSession() {
 
 func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sid := uuid.Rand().Hex()
+	nodeid := config.GetString("nodeid", "")
 	session := &Session{
 		wg:      wg,
-		Status:  &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Channel: c},
+		Status:  &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
 		clean:   cleanSession,
 		ssdb:    ssdb,
 		node:    node,

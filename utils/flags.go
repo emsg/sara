@@ -62,6 +62,10 @@ var (
 		Usage: "cmd-line first, config second ",
 		Value: "/etc/sara/conf.json",
 	}
+	NodeidFlag = cli.StringFlag{
+		Name:  "nodeid",
+		Usage: "unique and not empty",
+	}
 )
 
 func InitFlags() []cli.Flag {
@@ -73,6 +77,7 @@ func InitFlags() []cli.Flag {
 		LogLevelFlag,
 		DBAddrFlag,
 		DBPoolFlag,
+		NodeidFlag,
 		NodeaddrFlag,
 		DcFlag,
 		CallbackFlag,
@@ -87,9 +92,14 @@ var (
 		Usage: "execute 'ulimit -n' to fetch the max value",
 		Value: 1024,
 	}
+	Laddr = cli.StringFlag{
+		Name:  "laddr,l",
+		Usage: "source ip",
+		Value: "",
+	}
 	Addr = cli.StringFlag{
-		Name:  "addr,a",
-		Usage: "host:port",
+		Name:  "raddr,a",
+		Usage: "target ip:port ",
 		Value: "localhost:4222",
 	}
 	HbType = cli.IntFlag{
@@ -107,6 +117,7 @@ var (
 func InitFlagsForTestOfMakeConn() []cli.Flag {
 	return []cli.Flag{
 		Total,
+		Laddr,
 		Addr,
 		HbType,
 		ConnType,

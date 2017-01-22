@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sara/utils"
+	"sync"
 	"time"
 
 	"github.com/alecthomas/log4go"
@@ -34,6 +35,15 @@ type SaraDatabase struct {
 	stop     chan struct{}
 	tl       bool
 	wbCh     chan writeBufArgs
+	wg       *sync.WaitGroup
+}
+
+func (self *SaraDatabase) wbfConsumerWorker() {
+	for {
+		wb := <-self.wbCh
+		self.executeDirect(wb.cmd, wb.args...)
+		self.wg.Done()
+	}
 }
 
 func (self *SaraDatabase) wbfConsumer() {
@@ -43,15 +53,8 @@ func (self *SaraDatabase) wbfConsumer() {
 	}
 	log4go.Info("write buffer started ; total consume [%d]", consumerTotal)
 	for i := 0; i < consumerTotal; i++ {
-		go func(tid string) {
-			for {
-				wb := <-self.wbCh
-				//log4go.Debug("wbf_consumer [%s] wb=%s", tid, wb)
-				self.executeDirect(wb.cmd, wb.args...)
-			}
-		}(fmt.Sprintf("t-%d", i))
+		go self.wbfConsumerWorker()
 	}
-
 }
 
 func (self *SaraDatabase) getRedisClient(k string) (r *redis.Client) {
@@ -98,7 +101,7 @@ func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	return nil
 }
 func (self *SaraDatabase) DeleteByIdx(idx []byte) error {
-	if ids, err := self.execute("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
+	if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
 		return err
 	} else {
 		for _, k := range ids {
@@ -131,13 +134,16 @@ func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
 }
 
 func (self *SaraDatabase) Close() {
-	self.stop <- struct{}{}
+	log4go.Info("wait_close_db")
+	self.wg.Wait()
 	switch self.model {
 	case MODEL_SINGLE:
 		self.p_cli.Empty()
 	case MODEL_CLUSTER:
 		self.c_cli.Close()
 	}
+	self.stop <- struct{}{}
+	log4go.Info("success_close_db")
 }
 
 func (self *SaraDatabase) keepalive() {
@@ -200,6 +206,7 @@ func (self *SaraDatabase) execute(cmd string, args ...interface{}) *redis.Resp {
 		cmd:  cmd,
 		args: args,
 	}
+	self.wg.Add(1)
 	self.wbCh <- wb
 	return nil
 }
@@ -228,6 +235,7 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
 		wbCh:     make(chan writeBufArgs, 20000),
+		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initDb(); err != nil {
 		return nil, err
@@ -241,6 +249,7 @@ func NewClusterDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
 		wbCh:     make(chan writeBufArgs, 20000),
+		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initClusterDb(); err != nil {
 		return nil, err

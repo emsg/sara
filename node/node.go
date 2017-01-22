@@ -22,7 +22,7 @@ type Node struct {
 	name                  string
 	sessionMap            map[string]*core.Session //all avaliable session
 	Port, SSLPort, WSPort int
-	stop                  chan chan int
+	stop                  chan int
 	cleanSession          chan string
 	tcpListen             *net.TCPListener
 	db                    saradb.Database //SessionStatus db
@@ -58,21 +58,19 @@ func (self *Node) Wait() {
 	if self.tcpListen == nil {
 		return
 	}
-	k := <-self.stop
+	<-self.stop
 	//shutdown
 	for _, s := range self.sessionMap {
 		s.CloseSession("node_stop")
 	}
-	log4go.Info("node shutdown success.")
 	self.wg.Wait()
-	k <- 1
+	self.db.Close()
+	//defer self.tcpListen.Close()
+	log4go.Info("node shutdown success.")
 }
 
 func (self *Node) Stop() {
-	k := make(chan int)
-	self.stop <- k
-	<-k
-	defer self.tcpListen.Close()
+	self.stop <- 1
 }
 
 func (self *Node) clean() {
@@ -162,6 +160,12 @@ func (self *Node) dataChannelHandler(message string) {
 	}
 }
 
+func (self *Node) cleanGhostSession() {
+	//XXX clean ghost session
+	self.db.DeleteByIdx([]byte(config.GetString("nodeid", "")))
+	log4go.Info("🔪  👻  clean ghost session")
+}
+
 func New(ctx *cli.Context) *Node {
 	node := &Node{
 		wg:           &sync.WaitGroup{},
@@ -169,7 +173,7 @@ func New(ctx *cli.Context) *Node {
 		cleanSession: make(chan string, 4096),
 		Port:         config.GetInt("port", 4222),   //ctx.GlobalInt("port"),
 		WSPort:       config.GetInt("wsport", 4224), //ctx.GlobalInt("wsport"),
-		stop:         make(chan chan int),
+		stop:         make(chan int),
 	}
 	dbaddr := config.GetString("dbaddr", "localhost:6379")
 	dbpool := config.GetInt("dbpool", 100)
@@ -197,6 +201,7 @@ func New(ctx *cli.Context) *Node {
 	} else {
 		go func() { rpcserver.Start() }()
 	}
+	node.cleanGhostSession()
 	go node.clean()
 	return node
 }

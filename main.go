@@ -50,6 +50,18 @@ func init() {
 			Action: stop,
 		},
 		{
+			Name:   "setup",
+			Usage:  "生成默认配置文件",
+			Action: setupConf,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "out,o",
+					Usage: "配置文件全路径",
+					Value: "/etc/sara/conf.json",
+				},
+			},
+		},
+		{
 			Name:     "makeconn",
 			Usage:    "创建指定个数的连接，测试最大连接数",
 			Category: "test",
@@ -64,17 +76,17 @@ func init() {
 		},
 	}
 	app.Before = func(ctx *cli.Context) error {
+		// init config
+		config.Load(ctx)
 		// init log4go
-		filepath := ctx.GlobalString("logfile")
-		idx := ctx.GlobalInt("loglevel")
+		filepath := config.GetString("logfile", "")
+		idx := config.GetInt("loglevel", 3)
 		level := logLevel[idx]
 		if filepath != "" {
 			fmt.Println("logfile =", filepath, "level =", level)
 			log4go.AddFilter("file", log4go.Level(level), log4go.NewFileLogWriter(filepath, false))
 		}
 		log4go.AddFilter("stdout", log4go.Level(level), log4go.NewConsoleLogWriter())
-		// init config
-		config.Load(ctx)
 		// init pprof
 		if ctx.GlobalBool("debug") {
 			log4go.Warn("start collection cpu and mem profile ... ")
@@ -107,10 +119,11 @@ func sara(ctx *cli.Context) error {
 }
 
 func makeconnForTest(ctx *cli.Context) error {
-	a := ctx.String("addr")
+	l := ctx.String("laddr")
+	a := ctx.String("raddr")
 	t := ctx.Int("total")
 	h := ctx.Int("heartbeat")
-	utils.MakeConn(a, t, h)
+	utils.MakeConn(l, a, t, h)
 	return nil
 }
 
@@ -199,9 +212,20 @@ func signalHandler(ctx *cli.Context) {
 				}
 			case syscall.SIGTSTP:
 			case syscall.SIGINT:
-				fmt.Println("stop server.")
+				log4go.Warn("stop server.")
 				currentnode.Stop()
 			}
 		}
 	}()
+}
+
+func setupConf(ctx *cli.Context) error {
+	outpath := ctx.String("out")
+	b := []byte(config.Template)
+	if err := ioutil.WriteFile(outpath, b, 0644); err != nil {
+		fmt.Printf("💔  [fail] setup config (%s) error : %v", outpath, err)
+		return err
+	}
+	fmt.Printf("😄  [success] setup config to : %s\n", outpath)
+	return nil
 }
