@@ -3,7 +3,7 @@ package saradb
 import (
 	"errors"
 	"fmt"
-	"sara/utils"
+	//"sara/utils"
 	"sync"
 	"time"
 
@@ -27,34 +27,75 @@ const (
 )
 
 type SaraDatabase struct {
-	Addr     string
-	PoolSize int
-	c_cli    *cluster.Cluster
-	p_cli    *pool.Pool
-	model    DBMODEL
-	stop     chan struct{}
-	tl       bool
-	wbCh     chan writeBufArgs
-	wg       *sync.WaitGroup
+	Addr         string
+	PoolSize     int
+	c_cli        *cluster.Cluster
+	p_cli        *pool.Pool
+	model        DBMODEL
+	stop         chan struct{}
+	tl           bool
+	wbCh         chan writeBufArgs //异步的写操作缓冲区
+	wbTotal      int               //写操作工作线程数
+	wbSyncChList []chan int        //同步写操作工作线程
+	wg           *sync.WaitGroup   //同步写操作工作线程
+	lock         *sync.RWMutex
 }
 
-func (self *SaraDatabase) wbfConsumerWorker() {
+func (self *SaraDatabase) wbfConsumerWorker(wbSyncCh chan int) {
+	uuid := uuid.Rand().Hex()
+	defer self.wg.Done()
+	var kill, send_kill bool
+EndLoop:
 	for {
-		wb := <-self.wbCh
-		self.executeDirect(wb.cmd, wb.args...)
-		self.wg.Done()
+		select {
+		case wb := <-self.wbCh:
+			if kill && !send_kill {
+				//log4go.Info("%s 🔪  %v,%v", uuid, kill, send_kill)
+				wb := writeBufArgs{cmd: "KILL"}
+				self.wbCh <- wb
+				send_kill = true
+			}
+			if wb.cmd == "KILL" {
+				if self.wbTotal > 1 {
+					self.lock.Lock()
+					self.wbTotal -= 1
+					//自杀吧
+					self.lock.Unlock()
+					break EndLoop
+				} else {
+					log4go.Info("%s ⌛️  %d", uuid, self.wbTotal)
+				}
+			} else {
+				self.executeDirect(wb.cmd, wb.args...)
+			}
+		case <-wbSyncCh:
+			kill = true
+		case <-time.After(time.Duration(2 * time.Second)):
+			if kill {
+				self.lock.Lock()
+				self.wbTotal -= 1
+				self.lock.Unlock()
+				break EndLoop
+			}
+		}
 	}
 }
 
 func (self *SaraDatabase) wbfConsumer() {
-	consumerTotal := 2
-	if self.PoolSize > 30 {
-		consumerTotal = self.PoolSize / 10
+	consumerTotal := 10
+	if self.PoolSize > 200 {
+		consumerTotal = self.PoolSize / 20
 	}
 	log4go.Info("write buffer started ; total consume [%d]", consumerTotal)
+	wbSyncChList := make([]chan int, 0)
+	self.wbTotal = consumerTotal
+	self.wg.Add(consumerTotal)
 	for i := 0; i < consumerTotal; i++ {
-		go self.wbfConsumerWorker()
+		wbSyncCh := make(chan int)
+		go self.wbfConsumerWorker(wbSyncCh)
+		wbSyncChList = append(wbSyncChList, wbSyncCh)
 	}
+	self.wbSyncChList = wbSyncChList
 }
 
 func (self *SaraDatabase) getRedisClient(k string) (r *redis.Client) {
@@ -90,7 +131,9 @@ func (self *SaraDatabase) Delete(key []byte) error {
 	return nil
 }
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
-	r := self.execute("ZADD", idx, utils.Timestamp13(), key)
+	//r := self.execute("ZADD", idx, utils.Timestamp13(), key)
+	//val := fmt.Sprintf("%d%s", utils.Timestamp13(), key)
+	r := self.execute("HSET", idx, key, value)
 	if r != nil && r.Err != nil {
 		return r.Err
 	}
@@ -101,7 +144,7 @@ func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	return nil
 }
 func (self *SaraDatabase) DeleteByIdx(idx []byte) error {
-	if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
+	if ids, err := self.executeDirect("HKEYS", idx).ListBytes(); err != nil {
 		return err
 	} else {
 		for _, k := range ids {
@@ -109,32 +152,53 @@ func (self *SaraDatabase) DeleteByIdx(idx []byte) error {
 		}
 	}
 	self.Delete(idx)
+	/*
+		if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
+			return err
+		} else {
+			for _, k := range ids {
+				self.Delete(k)
+			}
+		}
+	*/
 	return nil
 }
 
 func (self *SaraDatabase) DeleteByIdxKey(idx, key []byte) error {
-	self.execute("ZREM", idx, key)
+	self.execute("HDEL", idx, key)
+	//self.execute("ZREM", idx, key)
 	self.Delete(key)
 	return nil
 }
 
 func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
-	if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
+	if vals, err := self.executeDirect("HVALS", idx).ListBytes(); err != nil {
 		return nil, err
 	} else {
-		var r [][]byte
-		for _, k := range ids {
-			if v, e := self.Get(k); e == nil && v != nil {
-				r = append(r, v)
-			}
-		}
-		return r, nil
+		return vals, nil
 	}
+	/*
+		if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
+			return nil, err
+		} else {
+			var r [][]byte
+			for _, k := range ids {
+				if v, e := self.Get(k); e == nil && v != nil {
+					r = append(r, v)
+				}
+			}
+			return r, nil
+		}
+	*/
 	return nil, errors.New("empty")
 }
 
 func (self *SaraDatabase) Close() {
 	log4go.Info("wait_close_db")
+	for i, wbSyncCh := range self.wbSyncChList {
+		wbSyncCh <- i
+		log4go.Info("👷  consumer %d closed... (total:%d)", i, len(self.wbSyncChList))
+	}
 	self.wg.Wait()
 	switch self.model {
 	case MODEL_SINGLE:
@@ -206,7 +270,7 @@ func (self *SaraDatabase) execute(cmd string, args ...interface{}) *redis.Resp {
 		cmd:  cmd,
 		args: args,
 	}
-	self.wg.Add(1)
+	//self.wg.Add(1)
 	self.wbCh <- wb
 	return nil
 }
@@ -236,6 +300,7 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		stop:     make(chan struct{}),
 		wbCh:     make(chan writeBufArgs, 20000),
 		wg:       new(sync.WaitGroup),
+		lock:     new(sync.RWMutex),
 	}
 	if err := c.initDb(); err != nil {
 		return nil, err
@@ -250,6 +315,7 @@ func NewClusterDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		stop:     make(chan struct{}),
 		wbCh:     make(chan writeBufArgs, 20000),
 		wg:       new(sync.WaitGroup),
+		lock:     new(sync.RWMutex),
 	}
 	if err := c.initClusterDb(); err != nil {
 		return nil, err

@@ -76,17 +76,6 @@ func init() {
 		},
 	}
 	app.Before = func(ctx *cli.Context) error {
-		// init config
-		config.Load(ctx)
-		// init log4go
-		filepath := config.GetString("logfile", "")
-		idx := config.GetInt("loglevel", 3)
-		level := logLevel[idx]
-		if filepath != "" {
-			fmt.Println("logfile =", filepath, "level =", level)
-			log4go.AddFilter("file", log4go.Level(level), log4go.NewFileLogWriter(filepath, false))
-		}
-		log4go.AddFilter("stdout", log4go.Level(level), log4go.NewConsoleLogWriter())
 		// init pprof
 		if ctx.GlobalBool("debug") {
 			log4go.Warn("start collection cpu and mem profile ... ")
@@ -107,6 +96,17 @@ func main() {
 }
 
 func sara(ctx *cli.Context) error {
+	// init config
+	config.Load(ctx)
+	// init log4go
+	filepath := config.GetString("logfile", "")
+	idx := config.GetInt("loglevel", 3)
+	level := logLevel[idx]
+	if filepath != "" {
+		fmt.Println("logfile =", filepath, "level =", level)
+		log4go.AddFilter("file", log4go.Level(level), log4go.NewFileLogWriter(filepath, false))
+	}
+	log4go.AddFilter("stdout", log4go.Level(level), log4go.NewConsoleLogWriter())
 	//log4go.Debug(">> listener on port = %d", config.GetInt("port", 4222))
 	signalHandler(ctx)
 	currentnode = node.New(ctx)

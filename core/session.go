@@ -375,7 +375,7 @@ func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRout
 		ssdb:    ssdb,
 		node:    node,
 		sc:      sc,
-		packets: make(chan []byte, 1024),
+		packets: make(chan []byte, 32),
 	}
 	go session.receive()
 	return session

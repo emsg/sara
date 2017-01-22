@@ -6,6 +6,7 @@ import (
 	"github.com/tidwall/gjson"
 	"net"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -60,13 +61,12 @@ func (self *client) start() {
 	}
 }
 
-func newClient(addr string) (*client, error) {
+func newClient(addr, laddr string, lport int) (*client, error) {
 	var conn net.Conn
 	var err error
-	if localAddr == "" {
+	if laddr == "" {
 		conn, err = net.DialTimeout("tcp", addr, 3*time.Second)
 	} else {
-		lport := <-localPortPoolCh
 		laddr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", localAddr, lport))
 		raddr, _ := net.ResolveTCPAddr("tcp", addr)
 		conn, err = net.DialTCP("tcp", laddr, raddr)
@@ -87,8 +87,17 @@ func newClient(addr string) (*client, error) {
 
 func genTcp() {
 	for addr := range addrQueue {
-		if _, e := newClient(addr); e != nil {
-			fail += 1
+		if localAddr == "" {
+			if _, e := newClient(addr, "", 0); e != nil {
+				fail += 1
+			}
+		} else if laddrs := strings.Split(localAddr, ","); len(laddrs) > 0 {
+			lport := <-localPortPoolCh
+			for _, laddr := range laddrs {
+				if _, e := newClient(addr, laddr, lport); e != nil {
+					fail += 1
+				}
+			}
 		}
 		wg.Done()
 	}
@@ -117,8 +126,9 @@ func MakeConn(laddr, addr string, total, hb int) {
 	}
 	wg.Wait()
 	e := time.Now().UnixNano() / 1000000
+	ll := len(strings.Split(localAddr, ","))
 	fmt.Println("cpu core:", cpu, " worker:", cpu*2)
-	fmt.Println("😊  total:", total, "finished , fail:", fail, " time:", (e - s), "ms. heartbeat:", hb)
+	fmt.Println("😊  total:", total*ll, "finished , fail:", fail, " time:", (e - s), "ms. heartbeat:", hb)
 	close(addrQueue)
 	close(finish)
 	<-stop
