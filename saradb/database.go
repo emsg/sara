@@ -194,6 +194,7 @@ func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
 }
 
 func (self *SaraDatabase) Close() {
+	self.stop <- struct{}{}
 	log4go.Info("wait_close_db")
 	for i, wbSyncCh := range self.wbSyncChList {
 		wbSyncCh <- i
@@ -206,7 +207,6 @@ func (self *SaraDatabase) Close() {
 	case MODEL_CLUSTER:
 		self.c_cli.Close()
 	}
-	self.stop <- struct{}{}
 	log4go.Info("success_close_db")
 }
 
@@ -216,7 +216,7 @@ over:
 	for {
 		select {
 		case <-self.stop:
-			log4go.Debug("♨️  shutdown cluster_database")
+			log4go.Debug("♨️  kill keeplive thread.")
 			break over
 		default:
 			r := self.execute("SETEX", k, 4, 1)

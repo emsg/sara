@@ -171,6 +171,10 @@ func (self *JID) String() string {
 		return fmt.Sprintf("%s@%s", self.user, self.domain)
 	}
 }
+func NewJIDByUidDomain(uid, domain string) (*JID, error) {
+	j := fmt.Sprintf("%s@%s", uid, domain)
+	return NewJID(j)
+}
 func NewJID(str string) (*JID, error) {
 	jid := &JID{}
 	arr := strings.Split(str, "@")

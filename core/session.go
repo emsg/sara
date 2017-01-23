@@ -9,6 +9,7 @@ import (
 	"sara/external"
 	"sara/saradb"
 	"sara/utils"
+	"strings"
 	"sync"
 	"time"
 
@@ -161,6 +162,13 @@ func (self *Session) Kill() {
 	self.CloseSession("kill")
 }
 
+func (self *Session) RoutePacketList(packetList []*types.Packet) {
+	for _, packet := range packetList {
+		self.storePacket(packet)
+		self.RoutePacket(packet)
+	}
+}
+
 func (self *Session) RoutePacket(packet *types.Packet) {
 	jid, _ := types.NewJID(self.Status.Jid)
 	// packet 里面的 from 一定是正确的,这是 SDK 决定的
@@ -237,6 +245,7 @@ func (self *Session) receive() {
 				self.heartbeat()
 			} else if packet, err := types.NewPacket(p); err == nil {
 				//消息协议解析,再分别处理 server_ack 和
+				packet.Envelope.Ct = fmt.Sprintf("%d", utils.Timestamp13())
 				id, from, to, msgtype := packet.EnvelopeIdFromToType()
 				log4go.Debug("recv: %s->%s", from, p)
 				if msgtype == types.MSG_TYPE_STATE && SERVER_ACK == to {
@@ -249,6 +258,19 @@ func (self *Session) receive() {
 					self.RoutePacket(packet)
 				} else if msgtype == types.MSG_TYPE_GROUP_CHAT {
 					//TODO 群聊
+					gid := packet.Envelope.Gid
+					groupUsersKey := fmt.Sprintf("group_%s", gid)
+					gf := func(id string, users []byte, packet *types.Packet) {
+						packets := genGroupPackets(users, packet)
+						self.answer(types.NewPacketAck(id))
+						self.RoutePacketList(packets)
+					}
+					if users, err := self.ssdb.Get([]byte(groupUsersKey)); err == nil {
+						log4go.Debug("gid=%s ; users=%s", gid, users)
+						gf(id, users, packet)
+					} else {
+						//TODO callback
+					}
 				} else {
 					//TODO 错误的操作
 				}
@@ -387,4 +409,27 @@ func NewSessionStatusFromJson(data []byte) *SessionStatus {
 		log4go.Error(err)
 	}
 	return ss
+}
+
+func genGroupPackets(users []byte, packet *types.Packet) (packets []*types.Packet) {
+	from := packet.Envelope.From
+	fromJid, _ := types.NewJID(from)
+	domain := fromJid.GetDomain()
+	for _, to_uid := range strings.Split(string(users), ",") {
+		to_jid, _ := types.NewJIDByUidDomain(to_uid, domain)
+		to := to_jid.StringWithoutResource()
+		envelope := types.Envelope{
+			Id:   uuid.Rand().Hex(),
+			From: from,
+			To:   to,
+			Gid:  packet.Envelope.Gid,
+			Ct:   fmt.Sprintf("%d", utils.Timestamp13()),
+		}
+		new_packet := &types.Packet{}
+		new_packet.Envelope = envelope
+		new_packet.Payload = packet.Payload
+		new_packet.Vsn = packet.Vsn
+		packets = append(packets, new_packet)
+	}
+	return
 }
