@@ -24,7 +24,7 @@ func Auth(uid, pwd string) bool {
 		return true
 	}
 	log4go.Debug("auth_callback_url=%s ; uid=%s,pwd=%s", url, uid, pwd)
-	body, body_err := NewParams("emsg_auth", "auth", "uid", "foo", "token", "bar").ToJson()
+	body, body_err := NewParams("emsg_auth", "auth", "uid", uid, "token", pwd).ToJson()
 	if body_err != nil {
 		log4go.Error(body_err)
 		return false
