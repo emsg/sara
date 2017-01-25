@@ -156,6 +156,7 @@ func (self *Node) dataChannelHandler(message string) {
 			ss := core.NewSessionStatusFromJson(ssb)
 			self.Route(ss.Channel, ss.Sid, packet)
 		} else {
+			core.StorePacket(self.db, packet)
 			log4go.Debug("☕️  📮  %s", skey)
 		}
 	}

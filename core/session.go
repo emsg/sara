@@ -164,12 +164,12 @@ func (self *Session) Kill() {
 
 func (self *Session) RoutePacketList(packetList []*types.Packet) {
 	for _, packet := range packetList {
-		self.storePacket(packet)
 		self.RoutePacket(packet)
 	}
 }
 
 func (self *Session) RoutePacket(packet *types.Packet) {
+	self.storePacket(packet)
 	jid, _ := types.NewJID(self.Status.Jid)
 	// packet 里面的 from 一定是正确的,这是 SDK 决定的
 	id, from, to, _ := packet.EnvelopeIdFromToType()
@@ -254,7 +254,6 @@ func (self *Session) receive() {
 				} else if msgtype == types.MSG_TYPE_CHAT {
 					// 单聊
 					self.answer(types.NewPacketAck(id))
-					self.storePacket(packet)
 					self.RoutePacket(packet)
 				} else if msgtype == types.MSG_TYPE_GROUP_CHAT {
 					//TODO 群聊
@@ -338,11 +337,7 @@ func (self *Session) storeSessionStatus() {
 
 //所有消息都先存储起来
 func (self *Session) storePacket(packet *types.Packet) {
-	id, _, to, _ := packet.EnvelopeIdFromToType()
-	to_jid, _ := types.NewJID(to)
-	idx := to_jid.ToOfflineKey()
-	val := packet.ToJson()
-	self.ssdb.PutExWithIdx(idx, []byte(id), val, OFFLINE_EXPIRED)
+	StorePacket(self.ssdb, packet)
 }
 
 func (self *Session) fetchOfflinePacket() (pks []*types.BasePacket, ids []string, err error) {
@@ -445,4 +440,12 @@ func genGroupPackets(users []byte, packet *types.Packet) (packets []*types.Packe
 		}
 	}
 	return
+}
+
+func StorePacket(ssdb saradb.Database, packet *types.Packet) {
+	id, _, to, _ := packet.EnvelopeIdFromToType()
+	to_jid, _ := types.NewJID(to)
+	idx := to_jid.ToOfflineKey()
+	val := packet.ToJson()
+	ssdb.PutExWithIdx(idx, []byte(id), val, OFFLINE_EXPIRED)
 }
