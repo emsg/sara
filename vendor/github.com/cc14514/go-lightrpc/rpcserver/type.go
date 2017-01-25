@@ -28,7 +28,7 @@ type ReasonEntity struct {
 }
 
 type Success struct {
-	Sn      string      `json:"sn"`
+	Sn      string      `json:"sn,omitempty"`
 	Success bool        `json:"success"`
 	Entity  interface{} `json:"entity,omitempty"`
 }

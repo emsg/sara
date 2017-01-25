@@ -92,6 +92,7 @@ func handlerFunc(w http.ResponseWriter, r *http.Request) {
 
 func executeMethod(serviceReg ServiceReg, body string, success *Success) {
 	token := getToken(body)
+	sn := gjson.Get(body, "sn").String()
 	methodName := gjson.Get(body, "method").String()
 	methodName = paserMethodName(methodName)
 	serviceObj := serviceReg.Service
@@ -140,7 +141,7 @@ func executeMethod(serviceReg ServiceReg, body string, success *Success) {
 		runservice := func() {
 			rtn := refMethod.Call(inArr)[0].Interface().(Success)
 			log4go.Debug("rtn = %s", rtn)
-			success.Sn = rtn.Sn
+			success.Sn = sn
 			success.Success = rtn.Success
 			success.Entity = rtn.Entity
 		}
