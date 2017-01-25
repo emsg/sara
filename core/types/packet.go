@@ -139,6 +139,8 @@ func (self *JID) Equal(j string) bool {
 	return false
 }
 func (self *JID) EqualWithoutResource(j string) bool {
+	jj, _ := NewJID(j)
+	j = jj.StringWithoutResource()
 	if self.StringWithoutResource() == j {
 		return true
 	}
