@@ -19,6 +19,11 @@ var (
 		Usage: "TODO:Network listening port",
 		Value: config.GetDef("sslport").(int),
 	}
+	ListenRPCPortFlag = cli.IntFlag{
+		Name:  "rpcport",
+		Usage: "Network listening http-rpc port",
+		Value: config.GetDef("rpcport").(int),
+	}
 	LogfileFlag = cli.StringFlag{
 		Name:  "logfile",
 		Usage: "log file path",
@@ -73,6 +78,7 @@ func InitFlags() []cli.Flag {
 		ListenPortFlag,
 		ListenWSPortFlag,
 		ListenSSLPortFlag,
+		ListenRPCPortFlag,
 		LogfileFlag,
 		LogLevelFlag,
 		DBAddrFlag,

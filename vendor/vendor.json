@@ -32,10 +32,10 @@
 			"tree": true
 		},
 		{
-			"checksumSHA1": "TmiFLRn/pbnj8wZRXiR8u+Y2k4E=",
+			"checksumSHA1": "5rdsKf4VS1plVnKQ2ECxCS+LIAY=",
 			"path": "github.com/cc14514/go-lightrpc/rpcserver",
-			"revision": "e8ccbc21508c5951ee90d3a118d2c8c14f1f3299",
-			"revisionTime": "2016-12-07T02:26:10Z",
+			"revision": "c0d4c3cc9cfff709baeb04ed9808ffd9fb815c58",
+			"revisionTime": "2017-01-25T09:33:39Z",
 			"tree": true
 		},
 		{

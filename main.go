@@ -13,6 +13,7 @@ import (
 	"runtime/pprof"
 	"sara/config"
 	"sara/node"
+	"sara/service"
 	"sara/utils"
 	"strconv"
 	"syscall"
@@ -110,6 +111,7 @@ func sara(ctx *cli.Context) error {
 	//log4go.Debug(">> listener on port = %d", config.GetInt("port", 4222))
 	signalHandler(ctx)
 	currentnode = node.New(ctx)
+	service.StartRPC(currentnode)
 	currentnode.StartTCP()
 	currentnode.StartWS()
 	savePid()

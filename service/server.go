@@ -3,11 +3,13 @@ package service
 import (
 	"github.com/alecthomas/log4go"
 	"github.com/cc14514/go-lightrpc/rpcserver"
-	"github.com/urfave/cli"
+	"sara/config"
+	"sara/node"
 )
 
-func StartRPC(ctx *cli.Context) error {
-	rpcport := ctx.GlobalInt("rpcport")
+func StartRPC(node *node.Node) error {
+	rpcport := config.GetInt("rpcport", 4280)
+	log4go.Info("http-rpc start on [0.0.0.0:%d]", rpcport)
 	go func(rpcport int) {
 		rs := &rpcserver.Rpcserver{
 			Port:       rpcport,

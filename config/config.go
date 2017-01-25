@@ -14,6 +14,7 @@ var configs []ConfVo = []ConfVo{
 	newConfVoKeyDef("port", 4222),
 	newConfVoKeyDef("wsport", 4224),
 	newConfVoKeyDef("sslport", 4333),
+	newConfVoKeyDef("rpcport", 4280),
 	newConfVoKeyDef("logfile", "/tmp/sara.log"),
 	newConfVoKeyDef("loglevel", 3),                //0=errr, 1=warn, 2=info, 3=debug
 	newConfVoKeyDef("dbaddr", "localhost:6379"),   // redis
@@ -111,6 +112,9 @@ func LoadFromConf(c *cli.Context) {
 	if r := gjson.Get(j, "sslport"); r.Exists() {
 		SetInt("sslport", int(r.Int()))
 	}
+	if r := gjson.Get(j, "rpcport"); r.Exists() {
+		SetInt("rpcport", int(r.Int()))
+	}
 	if r := gjson.Get(j, "logfile"); r.Exists() {
 		SetString("logfile", r.String())
 	}
@@ -138,6 +142,7 @@ func LoadFromCtx(ctx *cli.Context) {
 	SetInt("port", ctx.GlobalInt("port"))
 	SetInt("wsport", ctx.GlobalInt("wsport"))
 	SetInt("sslport", ctx.GlobalInt("sslport"))
+	SetInt("rpcport", ctx.GlobalInt("rpcport"))
 	SetString("logfile", ctx.GlobalString("logfile"))
 	SetInt("loglevel", ctx.GlobalInt("loglevel"))
 	SetString("dbaddr", ctx.GlobalString("dbaddr"))
@@ -157,6 +162,7 @@ var Template string = `
     "port": 4222,
     "wsport": 4224,
     "sslport": 4333,
+    "rpcport": 4280,
 	"nodeid":"n01",
     "dbaddr": "localhost:6379",
     "dbpool":100,

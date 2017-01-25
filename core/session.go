@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -195,6 +196,8 @@ func (self *Session) RoutePacket(packet *types.Packet) {
 				external.OfflineCallback(string(packet.ToJson()))
 			}
 		}
+	default:
+		log4go.Error("☠️  error_match: jid=%s ; from=%s ; to=%s", jid.StringWithoutResource(), from, to)
 	}
 }
 
@@ -258,11 +261,18 @@ func (self *Session) receive() {
 				} else if msgtype == types.MSG_TYPE_GROUP_CHAT {
 					//TODO 群聊
 					gid := packet.Envelope.Gid
-					groupUsersKey := fmt.Sprintf("group_%s", gid)
+					from_jid, _ := types.NewJID(from)
+					groupUsersKey := fmt.Sprintf("group_%s@%s", gid, from_jid.GetDomain())
 					gf := func(id string, users []byte, packet *types.Packet) {
-						packets := genGroupPackets(users, packet)
-						self.answer(types.NewPacketAck(id))
-						self.RoutePacketList(packets)
+						jid, _ := types.NewJID(self.Status.Jid)
+						uid := jid.GetUser()
+						if bytes.Contains(users, []byte(uid)) {
+							self.answer(types.NewPacketAck(id))
+							packets := genGroupPackets(users, packet)
+							self.RoutePacketList(packets)
+						} else {
+							self.answer(types.NewPacketSysNotify(id, "no_permission"))
+						}
 					}
 					if users, err := self.ssdb.Get([]byte(groupUsersKey)); err == nil {
 						// 在缓存里寻找群成员
@@ -285,7 +295,6 @@ func (self *Session) receive() {
 				}
 			} else {
 				log4go.Debug("👀  s=>>  %s", p)
-				log4go.Debug("👀  b=>>  %b", p)
 				self.answer(types.NewPacketSysNotify(uuid.Rand().Hex(), err.Error()))
 				self.CloseSession("receive_message")
 			}
@@ -345,14 +354,10 @@ func (self *Session) fetchOfflinePacket() (pks []*types.BasePacket, ids []string
 	idx := jid.ToOfflineKey()
 	var ddata [][]byte
 	if ddata, err = self.ssdb.GetByIdx(idx); err == nil {
-		for i, data := range ddata {
+		for _, data := range ddata {
 			if pk, pk_err := types.NewBasePacket(data); pk_err == nil {
 				ids = append(ids, pk.Envelope.Id)
 				pks = append(pks, pk)
-			} else {
-				log4go.Debug("%d ----> err = %s", i, pk_err)
-				log4go.Debug("%d ----> data = %s", i, data)
-				log4go.Debug("%d ----> pk = %s", i, pk)
 			}
 		}
 	}

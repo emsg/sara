@@ -112,15 +112,17 @@ func executeMethod(serviceReg ServiceReg, body string, success *Success) {
 				auth = true
 			} else if kind := in.Kind().String(); kind == "interface" || kind == "map" {
 				//interface{} 和 map[string]interface{} 就是序列化成 map 传递
+				target := map[string]interface{}{}
 				if paramsRes := gjson.Get(body, "params"); paramsRes.String() != "null" {
-					target := map[string]interface{}{}
 					json.Unmarshal([]byte(paramsRes.String()), &target)
-					inArr[i] = reflect.ValueOf(target)
 				}
+				inArr[i] = reflect.ValueOf(target)
 			} else if kind == "string" {
 				// 字符串则直接传递 json 字符串
 				if paramsRes := gjson.Get(body, "params"); paramsRes.String() != "null" {
 					inArr[i] = reflect.ValueOf(paramsRes.String())
+				} else {
+					inArr[i] = reflect.ValueOf("")
 				}
 			} else {
 				//TODO 2016-12-06 : 非常遗憾，当前版本还不能支持此功能

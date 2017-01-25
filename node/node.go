@@ -34,6 +34,10 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+func (self *Node) GetDB() saradb.Database {
+	return self.db
+}
+
 func (self *Node) StartWS() error {
 	addr := fmt.Sprintf("0.0.0.0:%d", self.WSPort)
 	go func() {
