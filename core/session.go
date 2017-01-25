@@ -204,7 +204,7 @@ func (self *Session) SendMessage(data []byte) (int, error) {
 }
 
 func (self *Session) CloseSession(tracemsg string) {
-	log4go.Debug("session_close at %s ; sid=%s", tracemsg, self.Status.Sid)
+	log4go.Debug("session_close at %s ; sid=%s ; jid=%s", tracemsg, self.Status.Sid, self.Status.Jid)
 	self.clean <- self.Status.Sid
 	if self.Status.Status == types.STATUS_LOGIN {
 		j, _ := types.NewJID(self.Status.Jid)
@@ -266,10 +266,20 @@ func (self *Session) receive() {
 						self.RoutePacketList(packets)
 					}
 					if users, err := self.ssdb.Get([]byte(groupUsersKey)); err == nil {
+						// 在缓存里寻找群成员
 						log4go.Debug("gid=%s ; users=%s", gid, users)
 						gf(id, users, packet)
 					} else {
-						//TODO callback
+						//callback
+						ulist, ulist_err := external.GetGroupUserList(gid)
+						if ulist_err == nil && len(ulist) > 1 { //群里面至少得有2个人
+							us := strings.Join(ulist, ",")
+							// 缓存群成员1小时
+							self.ssdb.PutEx([]byte(groupUsersKey), []byte(us), 3600)
+							gf(id, []byte(us), packet)
+						} else {
+							log4go.Error(ulist_err)
+						}
 					}
 				} else {
 					//TODO 错误的操作
@@ -414,22 +424,25 @@ func NewSessionStatusFromJson(data []byte) *SessionStatus {
 func genGroupPackets(users []byte, packet *types.Packet) (packets []*types.Packet) {
 	from := packet.Envelope.From
 	fromJid, _ := types.NewJID(from)
+	fromUser := fromJid.GetUser()
 	domain := fromJid.GetDomain()
-	for _, to_uid := range strings.Split(string(users), ",") {
-		to_jid, _ := types.NewJIDByUidDomain(to_uid, domain)
-		to := to_jid.StringWithoutResource()
-		envelope := types.Envelope{
-			Id:   uuid.Rand().Hex(),
-			From: from,
-			To:   to,
-			Gid:  packet.Envelope.Gid,
-			Ct:   fmt.Sprintf("%d", utils.Timestamp13()),
+	for _, toUser := range strings.Split(string(users), ",") {
+		if fromUser != toUser {
+			to_jid, _ := types.NewJIDByUidDomain(toUser, domain)
+			to := to_jid.StringWithoutResource()
+			envelope := types.Envelope{
+				Id:   uuid.Rand().Hex(),
+				From: from,
+				To:   to,
+				Gid:  packet.Envelope.Gid,
+				Ct:   fmt.Sprintf("%d", utils.Timestamp13()),
+			}
+			new_packet := &types.Packet{}
+			new_packet.Envelope = envelope
+			new_packet.Payload = packet.Payload
+			new_packet.Vsn = packet.Vsn
+			packets = append(packets, new_packet)
 		}
-		new_packet := &types.Packet{}
-		new_packet.Envelope = envelope
-		new_packet.Payload = packet.Payload
-		new_packet.Vsn = packet.Vsn
-		packets = append(packets, new_packet)
 	}
 	return
 }

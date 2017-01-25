@@ -22,6 +22,7 @@ type Database interface {
 	Get(key []byte) ([]byte, error)
 	PutExWithIdx(idx, key, value []byte, ex int) error
 	GetByIdx(idx []byte) ([][]byte, error)
+	CountByIdx(idx []byte) (int, error)
 
 	DeleteByIdx(idx []byte) error
 	DeleteByIdxKey(idx, key []byte) error

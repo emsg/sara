@@ -137,7 +137,11 @@ func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	if r != nil && r.Err != nil {
 		return r.Err
 	}
-	r = self.execute("SETEX", key, ex, value)
+	if ex > 0 {
+		r = self.execute("SETEX", key, ex, value)
+	} else {
+		r = self.execute("SET", key, value)
+	}
 	if r != nil && r.Err != nil {
 		return r.Err
 	}
@@ -171,25 +175,16 @@ func (self *SaraDatabase) DeleteByIdxKey(idx, key []byte) error {
 	return nil
 }
 
+func (self *SaraDatabase) CountByIdx(idx []byte) (int, error) {
+	return self.executeDirect("HLEN", idx).Int()
+}
+
 func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
 	if vals, err := self.executeDirect("HVALS", idx).ListBytes(); err != nil {
 		return nil, err
 	} else {
 		return vals, nil
 	}
-	/*
-		if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
-			return nil, err
-		} else {
-			var r [][]byte
-			for _, k := range ids {
-				if v, e := self.Get(k); e == nil && v != nil {
-					r = append(r, v)
-				}
-			}
-			return r, nil
-		}
-	*/
 	return nil, errors.New("empty")
 }
 

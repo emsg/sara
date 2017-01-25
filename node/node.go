@@ -10,6 +10,7 @@ import (
 	"sara/core/types"
 	"sara/saradb"
 	"sara/sararpc"
+	"sara/utils"
 	"sync"
 
 	"github.com/alecthomas/log4go"
@@ -162,10 +163,16 @@ func (self *Node) dataChannelHandler(message string) {
 
 func (self *Node) cleanGhostSession() {
 	//XXX clean ghost session
-	self.db.DeleteByIdx([]byte(config.GetString("nodeid", "")))
+	nodeid := []byte(config.GetString("nodeid", ""))
+	ts := fmt.Sprintf("%d", utils.Timestamp13())
+	//所有的节点，启动后，都注册在 sara 这个 hashtable 中,记录节点的启动时间
+	self.db.PutExWithIdx([]byte("sara"), nodeid, []byte(ts), 0)
+	log4go.Info("register node : %s", nodeid)
+	self.db.DeleteByIdx(nodeid)
 	log4go.Info("🔪  👻  clean ghost session")
 }
 
+//TODO 如何控制 nodeid 全局唯一，是否需要 gossip ?
 func New(ctx *cli.Context) *Node {
 	node := &Node{
 		wg:           &sync.WaitGroup{},
