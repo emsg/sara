@@ -7,10 +7,27 @@ import (
 	"sara/node"
 )
 
+var _node *node.Node
+
+func SuccessFalse(reason string) rpcserver.Success {
+	entity := make(map[string]interface{})
+	entity["reason"] = reason
+	return rpcserver.Success{
+		Success: false,
+		Entity:  entity,
+	}
+}
+
+func getNode() *node.Node {
+	return _node
+}
+
 func StartRPC(node *node.Node) error {
+	_node = node
 	rpcport := config.GetInt("rpcport", 4280)
 	log4go.Info("http-rpc start on [0.0.0.0:%d]", rpcport)
 	go func(rpcport int) {
+		RegService()
 		rs := &rpcserver.Rpcserver{
 			Port:       rpcport,
 			ServiceMap: ServiceRegMap,
@@ -20,7 +37,6 @@ func StartRPC(node *node.Node) error {
 				return true
 			},
 		}
-		log4go.Info("rpcserver is running at : %s", rpcport)
 		rs.StartServer()
 	}(rpcport)
 	return nil

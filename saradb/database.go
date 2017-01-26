@@ -14,6 +14,10 @@ import (
 	"github.com/mediocregopher/radix.v2/redis"
 )
 
+var (
+	IDX_SUFFIX = []byte("_idx")
+)
+
 type DBMODEL int
 
 type writeBufArgs struct {
@@ -133,6 +137,7 @@ func (self *SaraDatabase) Delete(key []byte) error {
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	//r := self.execute("ZADD", idx, utils.Timestamp13(), key)
 	//val := fmt.Sprintf("%d%s", utils.Timestamp13(), key)
+	idx = append(idx, IDX_SUFFIX...)
 	r := self.execute("HSET", idx, key, value)
 	if r != nil && r.Err != nil {
 		return r.Err
@@ -148,6 +153,7 @@ func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	return nil
 }
 func (self *SaraDatabase) DeleteByIdx(idx []byte) error {
+	idx = append(idx, IDX_SUFFIX...)
 	if ids, err := self.executeDirect("HKEYS", idx).ListBytes(); err != nil {
 		return err
 	} else {
@@ -169,6 +175,7 @@ func (self *SaraDatabase) DeleteByIdx(idx []byte) error {
 }
 
 func (self *SaraDatabase) DeleteByIdxKey(idx, key []byte) error {
+	idx = append(idx, IDX_SUFFIX...)
 	self.execute("HDEL", idx, key)
 	//self.execute("ZREM", idx, key)
 	self.Delete(key)
@@ -176,11 +183,13 @@ func (self *SaraDatabase) DeleteByIdxKey(idx, key []byte) error {
 }
 
 func (self *SaraDatabase) CountByIdx(idx []byte) (int, error) {
+	idx = append(idx, IDX_SUFFIX...)
 	return self.executeDirect("HLEN", idx).Int()
 }
 
 func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
-	if vals, err := self.executeDirect("HVALS", idx).ListBytes(); err != nil {
+	idx = append(idx, IDX_SUFFIX...)
+	if vals, err := self.executeDirect("HKEYS", idx).ListBytes(); err != nil {
 		return nil, err
 	} else {
 		return vals, nil

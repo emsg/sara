@@ -20,7 +20,7 @@ import (
 
 type Node struct {
 	wg                    *sync.WaitGroup
-	name                  string
+	Nodeid, name          string
 	sessionMap            map[string]*core.Session //all avaliable session
 	Port, SSLPort, WSPort int
 	stop                  chan int
@@ -168,7 +168,7 @@ func (self *Node) dataChannelHandler(message string) {
 
 func (self *Node) cleanGhostSession() {
 	//XXX clean ghost session
-	nodeid := []byte(config.GetString("nodeid", ""))
+	nodeid := []byte(self.Nodeid)
 	ts := fmt.Sprintf("%d", utils.Timestamp13())
 	//所有的节点，启动后，都注册在 sara 这个 hashtable 中,记录节点的启动时间
 	self.db.PutExWithIdx([]byte("sara"), nodeid, []byte(ts), 0)
@@ -213,6 +213,7 @@ func New(ctx *cli.Context) *Node {
 	} else {
 		go func() { rpcserver.Start() }()
 	}
+	node.Nodeid = config.GetString("nodeid", "")
 	node.cleanGhostSession()
 	go node.clean()
 	return node

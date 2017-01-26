@@ -12,8 +12,8 @@ func genServiceReg(namespace, version string, service interface{}) {
 	}
 }
 
-func init() {
+func RegService() {
 	vsn := "0.0.1"
-	genServiceReg("user", vsn, &UserService{})
-	genServiceReg("emsg_group", vsn, &EmsgGroupService{})
+	genServiceReg("emsg_group", vsn, &EmsgGroupService{node: getNode()})
+	genServiceReg("emsg_session", vsn, &EmsgSessionService{node: getNode()})
 }
