@@ -23,6 +23,7 @@ import (
 )
 
 var (
+	version     string         = "0.0.1"
 	logLevel    []log4go.Level = []log4go.Level{log4go.ERROR, log4go.WARNING, log4go.INFO, log4go.DEBUG}
 	app         *cli.App
 	cpu_log     string = "/tmp/sara_cpu.out"
@@ -45,6 +46,10 @@ func init() {
 	app.Flags = utils.InitFlags()
 	app.Action = sara
 	app.Commands = []cli.Command{
+		{
+			Name:   "version",
+			Action: vsn,
+		},
 		{
 			Name:   "stop",
 			Usage:  "停止服务，尽量避免直接 kill 服务",
@@ -229,5 +234,10 @@ func setupConf(ctx *cli.Context) error {
 		return err
 	}
 	fmt.Printf("😄  [success] setup config to : %s\n", outpath)
+	return nil
+}
+
+func vsn(ctx *cli.Context) error {
+	fmt.Println(version)
 	return nil
 }
