@@ -35,8 +35,6 @@ var (
 func init() {
 	cpu_core := runtime.NumCPU()
 	runtime.GOMAXPROCS(cpu_core)
-	fmt.Println("cpu_core_total", cpu_core)
-
 	app = cli.NewApp()
 	app.Name = os.Args[0]
 	app.Usage = "SARA IM Server"
@@ -238,6 +236,7 @@ func setupConf(ctx *cli.Context) error {
 }
 
 func vsn(ctx *cli.Context) error {
-	fmt.Println(version)
+	fmt.Println("version:", version)
+	fmt.Println("source: https://github.com/emsg/sara")
 	return nil
 }

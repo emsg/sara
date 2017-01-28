@@ -115,6 +115,9 @@ func LoadFromConf(c *cli.Context) {
 	if r := gjson.Get(j, "rpcport"); r.Exists() {
 		SetInt("rpcport", int(r.Int()))
 	}
+	if r := gjson.Get(j, "accesstoken"); r.Exists() {
+		SetString("accesstoken", r.String())
+	}
 	if r := gjson.Get(j, "logfile"); r.Exists() {
 		SetString("logfile", r.String())
 	}
@@ -153,7 +156,7 @@ func LoadFromCtx(ctx *cli.Context) {
 	SetString("nodeid", ctx.GlobalString("nodeid"))
 }
 func Load(ctx *cli.Context) {
-	LoadFromCtx(ctx)
+	//LoadFromCtx(ctx)
 	LoadFromConf(ctx)
 }
 
@@ -163,6 +166,7 @@ var Template string = `
     "wsport": 4224,
     "sslport": 4333,
     "rpcport": 4280,
+	"accesstoken":"http-rpc access token",
 	"nodeid":"n01",
     "dbaddr": "localhost:6379",
     "dbpool":100,

@@ -33,8 +33,14 @@ func StartRPC(node *node.Node) error {
 			ServiceMap: ServiceRegMap,
 			// 校验请求中的 TOKEN 是否正确，根据不同的业务需求，会有不同实现
 			CheckToken: func(token rpcserver.TOKEN) bool {
-				log4go.Debug("TODO: Auth token = %s", token)
-				return true
+				if accesstoken := config.GetString("accesstoken", ""); accesstoken == "" {
+					log4go.Warn("⚠️  http-rpc free accese now, please set accesstoken.")
+					return true
+				} else if accesstoken == string(token) {
+					return true
+				}
+				log4go.Debug("error_token: %s", token)
+				return false
 			},
 		}
 		rs.StartServer()

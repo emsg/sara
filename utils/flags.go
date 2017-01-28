@@ -63,7 +63,7 @@ var (
 		Usage: "write 'pprof' info to /tmp/sara_cpu.out and /tmp/sara_mem.out",
 	}
 	ConfigFlag = cli.StringFlag{
-		Name:  "config",
+		Name:  "config,c",
 		Usage: "cmd-line first, config second ",
 		Value: "/etc/sara/conf.json",
 	}
@@ -75,18 +75,20 @@ var (
 
 func InitFlags() []cli.Flag {
 	return []cli.Flag{
-		ListenPortFlag,
-		ListenWSPortFlag,
-		ListenSSLPortFlag,
-		ListenRPCPortFlag,
-		LogfileFlag,
-		LogLevelFlag,
-		DBAddrFlag,
-		DBPoolFlag,
-		NodeidFlag,
-		NodeaddrFlag,
-		DcFlag,
-		CallbackFlag,
+		/*
+			ListenPortFlag,
+			ListenWSPortFlag,
+			ListenSSLPortFlag,
+			ListenRPCPortFlag,
+			LogfileFlag,
+			LogLevelFlag,
+			DBAddrFlag,
+			DBPoolFlag,
+			NodeidFlag,
+			NodeaddrFlag,
+			DcFlag,
+			CallbackFlag,
+		*/
 		DebugFlag,
 		ConfigFlag,
 	}

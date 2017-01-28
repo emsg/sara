@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"sara/config"
@@ -177,7 +178,7 @@ func (self *Session) RoutePacket(packet *types.Packet) {
 	switch {
 	case jid.EqualWithoutResource(to):
 		//给我的消息, ack 消息
-		self.messageHandler(packet)
+		self.SendMessage(packet.ToJson())
 	case jid.EqualWithoutResource(from):
 		//我发出去的消息
 		if to_jid, err := types.NewJID(to); err != nil {
@@ -219,12 +220,6 @@ func (self *Session) CloseSession(tracemsg string) {
 	self.sc.Close()
 }
 
-//我收到的其他 session 发给我的消息
-func (self *Session) messageHandler(packet *types.Packet) {
-	log4go.Debug("messageHandler -> %s", packet)
-	self.SendMessage(packet.ToJson())
-}
-
 // 这个方法只能处理 c2s 的请求，并不能处理 s2s
 func (self *Session) receive() {
 	self.wg.Add(1)
@@ -259,36 +254,12 @@ func (self *Session) receive() {
 					self.answer(types.NewPacketAck(id))
 					self.RoutePacket(packet)
 				} else if msgtype == types.MSG_TYPE_GROUP_CHAT {
-					//TODO 群聊
-					gid := packet.Envelope.Gid
-					from_jid, _ := types.NewJID(from)
-					groupUsersKey := fmt.Sprintf("group_%s@%s", gid, from_jid.GetDomain())
-					gf := func(id string, users []byte, packet *types.Packet) {
-						jid, _ := types.NewJID(self.Status.Jid)
-						uid := jid.GetUser()
-						if bytes.Contains(users, []byte(uid)) {
-							self.answer(types.NewPacketAck(id))
-							packets := genGroupPackets(users, packet)
-							self.RoutePacketList(packets)
-						} else {
-							self.answer(types.NewPacketSysNotify(id, "no_permission"))
-						}
-					}
-					if users, err := self.ssdb.Get([]byte(groupUsersKey)); err == nil {
-						// 在缓存里寻找群成员
-						log4go.Debug("gid=%s ; users=%s", gid, users)
-						gf(id, users, packet)
+					// 群聊
+					if packets, gerr := GenerateGroupPackets(self.ssdb, packet); gerr == nil {
+						self.answer(types.NewPacketAck(id))
+						self.RoutePacketList(packets)
 					} else {
-						//callback
-						ulist, ulist_err := external.GetGroupUserList(gid)
-						if ulist_err == nil && len(ulist) > 1 { //群里面至少得有2个人
-							us := strings.Join(ulist, ",")
-							// 缓存群成员1小时
-							self.ssdb.PutEx([]byte(groupUsersKey), []byte(us), 3600)
-							gf(id, []byte(us), packet)
-						} else {
-							log4go.Error(ulist_err)
-						}
+						self.answer(types.NewPacketSysNotify(id, gerr.Error()))
 					}
 				} else {
 					//TODO 错误的操作
@@ -432,6 +403,7 @@ func genGroupPackets(users []byte, packet *types.Packet) (packets []*types.Packe
 			to := to_jid.StringWithoutResource()
 			envelope := types.Envelope{
 				Id:   uuid.Rand().Hex(),
+				Type: types.MSG_TYPE_GROUP_CHAT,
 				From: from,
 				To:   to,
 				Gid:  packet.Envelope.Gid,
@@ -453,4 +425,36 @@ func StorePacket(ssdb saradb.Database, packet *types.Packet) {
 	idx := to_jid.ToOfflineKey()
 	val := packet.ToJson()
 	ssdb.PutExWithIdx(idx, []byte(id), val, OFFLINE_EXPIRED)
+}
+func GenerateGroupPackets(ssdb saradb.Database, packet *types.Packet) ([]*types.Packet, error) {
+	gid := packet.Envelope.Gid
+	from := packet.Envelope.From
+	from_jid, _ := types.NewJID(from)
+	groupUsersKey := fmt.Sprintf("group_%s@%s", gid, from_jid.GetDomain())
+	fn := func(users []byte, packet *types.Packet) ([]*types.Packet, error) {
+		uid := from_jid.GetUser()
+		if bytes.Contains(users, []byte(uid)) {
+			packets := genGroupPackets(users, packet)
+			return packets, nil
+		} else {
+			return nil, errors.New("no_permission")
+		}
+	}
+	if users, err := ssdb.Get([]byte(groupUsersKey)); err == nil {
+		// 在缓存里寻找群成员
+		log4go.Debug("gid=%s ; users=%s", gid, users)
+		return fn(users, packet)
+	} else {
+		//callback
+		ulist, ulist_err := external.GetGroupUserList(gid)
+		if ulist_err == nil && len(ulist) > 1 { //群里面至少得有2个人
+			us := strings.Join(ulist, ",")
+			// 缓存群成员1小时
+			ssdb.PutEx([]byte(groupUsersKey), []byte(us), 3600)
+			return fn([]byte(us), packet)
+		} else {
+			log4go.Error(ulist_err)
+		}
+	}
+	return nil, errors.New("group_notfound")
 }

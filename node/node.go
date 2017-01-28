@@ -154,6 +154,24 @@ func (self *Node) dataChannelHandler(message string) {
 		log4go.Error("error packet : %s", message)
 		return
 	}
+	//TODO type=2
+	switch packet.Envelope.Type {
+	case types.MSG_TYPE_GROUP_CHAT:
+		if packets, gerr := core.GenerateGroupPackets(self.db, packet); gerr == nil {
+			for _, p := range packets {
+				log4go.Debug("%s", p.ToJson())
+				self.routePacket(p)
+			}
+		} else {
+			log4go.Error(gerr.Error())
+		}
+	default:
+		//type!=2
+		self.routePacket(packet)
+	}
+}
+
+func (self *Node) routePacket(packet *types.Packet) {
 	if jid, jid_err := types.NewJID(packet.Envelope.To); jid_err == nil {
 		skey := jid.ToSessionid()
 		if ssb, se := self.db.Get(skey); se == nil {
@@ -165,7 +183,6 @@ func (self *Node) dataChannelHandler(message string) {
 		}
 	}
 }
-
 func (self *Node) cleanGhostSession() {
 	//XXX clean ghost session
 	nodeid := []byte(self.Nodeid)

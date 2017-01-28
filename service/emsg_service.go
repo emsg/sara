@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sara/core/types"
 	"sara/node"
 
 	"github.com/alecthomas/log4go"
@@ -54,4 +55,19 @@ func (self *EmsgSessionService) Counter(params interface{}, token rpcserver.TOKE
 	}
 	entity["counters"] = counters
 	return rpcserver.Success{Success: true, Entity: entity}
+}
+
+//3 判断用户是否在线
+func (self *EmsgSessionService) Isonline(params interface{}, token rpcserver.TOKEN) rpcserver.Success {
+	db := self.node.GetDB()
+	p := params.(map[string]interface{})
+	if jid, ok := p["jid"]; ok {
+		if j, err := types.NewJID(jid.(string)); err == nil {
+			sid := j.ToSessionid()
+			if _, e := db.Get(sid); e == nil {
+				return rpcserver.Success{Success: true}
+			}
+		}
+	}
+	return rpcserver.Success{Success: false}
 }
