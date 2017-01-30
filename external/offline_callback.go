@@ -22,6 +22,9 @@ import (
 { "sn":"789456123", "success":"false", "entity":reason/exception }
 */
 func OfflineCallback(packetStr string) bool {
+	if !config.GetBool("enable_offline_callback", true) {
+		return true
+	}
 	url := config.GetString("callback", "")
 	if url == "" {
 		return true

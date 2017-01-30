@@ -139,6 +139,12 @@ func LoadFromConf(c *cli.Context) {
 	if r := gjson.Get(j, "dc"); r.Exists() {
 		SetString("dc", r.String())
 	}
+	if r := gjson.Get(j, "enable_auth"); r.Exists() {
+		SetBool("enable_auth", r.Bool())
+	}
+	if r := gjson.Get(j, "enable_offline_callback"); r.Exists() {
+		SetBool("enable_offline_callback", r.Bool())
+	}
 }
 
 func LoadFromCtx(ctx *cli.Context) {
@@ -174,6 +180,8 @@ var Template string = `
     "nodeaddr": "localhost:4281",
     "logfile":"/tmp/sara.log",
     "loglevel":3,
-    "dc":"dc01"
+    "dc":"dc01",
+	"enable_auth":true,
+	"enable_offline_callback":true
 }
 `

@@ -19,6 +19,9 @@ import (
 { "sn":"789456123", "success":"false", "entity":reason/exception }
 */
 func Auth(uid, pwd string) bool {
+	if !config.GetBool("enable_auth", true) {
+		return true
+	}
 	url := config.GetString("callback", "")
 	if url == "" {
 		return true
