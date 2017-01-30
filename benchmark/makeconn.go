@@ -140,28 +140,40 @@ func (self *client) start() {
 			// 保持会话，开始心跳
 			stop := make(chan int)
 			go func(sc core.SessionConn, s chan int) {
-				//write thread
-			EndW:
+				//heartbeat
+			EndH:
 				for {
 					select {
 					case <-s:
-						break EndW
-					case <-time.After(time.Second * time.Duration(messageGap)):
-						if len(content) > 0 {
-							id := uuid.Rand().Hex()
-							from := self.uid
-							to := si.rand(self.uid)
-							message := fmt.Sprintf(messageTemplate, from, to, id, content)
-							p := append([]byte(message), byte(1))
-							sc.WritePacket(p)
-							si.counter("W", from, to)
-						}
+						break EndH
 					case <-time.After(time.Second * time.Duration(heartbeat)):
 						p := []byte{2, 1}
 						sc.WritePacket(p)
 					}
 				}
 			}(sc, stop)
+			if len(content) > 0 {
+				go func(sc core.SessionConn, s chan int) {
+					//write thread
+				EndW:
+					for {
+						select {
+						case <-s:
+							break EndW
+						case <-time.After(time.Second * time.Duration(messageGap)):
+							if len(content) > 0 {
+								id := uuid.Rand().Hex()
+								from := self.uid
+								to := si.rand(self.uid)
+								message := fmt.Sprintf(messageTemplate, from, to, id, content)
+								p := append([]byte(message), byte(1))
+								sc.WritePacket(p)
+								si.counter("W", from, to)
+							}
+						}
+					}
+				}(sc, stop)
+			}
 			go func(sc core.SessionConn, uid string, s chan int) {
 				//read thread
 				var _part []byte
