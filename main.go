@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"sara/benchmark"
 	"sara/config"
 	"sara/node"
 	"sara/service"
@@ -128,7 +129,9 @@ func makeconnForTest(ctx *cli.Context) error {
 	a := ctx.String("raddr")
 	t := ctx.Int("total")
 	h := ctx.Int("heartbeat")
-	utils.MakeConn(l, a, t, h)
+	mg := ctx.Int("messagegap")
+	ms := ctx.Int("messagesize")
+	benchmark.MakeConn(l, a, t, h, mg, ms)
 	return nil
 }
 

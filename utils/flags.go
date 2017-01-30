@@ -110,15 +110,20 @@ var (
 		Usage: "target ip:port ",
 		Value: "localhost:4222",
 	}
+	Ms = cli.IntFlag{
+		Name:  "messagesize,ms",
+		Usage: "payload size, unit KB,1KB==1024B;'0' is disable",
+		Value: 0,
+	}
+	Mg = cli.IntFlag{
+		Name:  "messagegap,mg",
+		Usage: "second",
+		Value: 5,
+	}
 	HbType = cli.IntFlag{
 		Name:  "heartbeat,b",
 		Usage: "second",
 		Value: 50,
-	}
-	ConnType = cli.IntFlag{
-		Name:  "conn_type",
-		Usage: "0 tcp,1 ws,2 ssl,3 wss",
-		Value: 0,
 	}
 )
 
@@ -128,6 +133,7 @@ func InitFlagsForTestOfMakeConn() []cli.Flag {
 		Laddr,
 		Addr,
 		HbType,
-		ConnType,
+		Ms,
+		Mg,
 	}
 }
