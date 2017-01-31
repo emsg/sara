@@ -1,6 +1,7 @@
 package node
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,10 +23,11 @@ type Node struct {
 	wg                    *sync.WaitGroup
 	Nodeid, name          string
 	sessionMap            map[string]*core.Session //all avaliable session
-	Port, SSLPort, WSPort int
+	Port, TLSPort, WSPort int
 	stop                  chan int
 	cleanSession          chan string
 	tcpListen             *net.TCPListener
+	tlsListen             net.Listener
 	db                    saradb.Database //SessionStatus db
 	dataChannel           sararpc.DataChannel
 }
@@ -56,6 +58,24 @@ func (self *Node) StartTCP() error {
 	log4go.Info("tcp start on [0.0.0.0:%d]", self.Port)
 	self.tcpListen = listen
 	go self.acceptTCP()
+	return nil
+}
+func (self *Node) StartTLS() error {
+	cert, err := tls.LoadX509KeyPair("/etc/sara/server.pem", "/etc/sara/server.key")
+	if err != nil {
+		log4go.Error("Fail start node ; err = %s", err)
+		return err
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}}
+	addr := fmt.Sprintf(":%d", self.TLSPort)
+	listen, err := tls.Listen("tcp", addr, config)
+	if err != nil {
+		log4go.Error("Fail start node ; err = %s", err)
+		return err
+	}
+	log4go.Info("tls start on [0.0.0.0:%d]", self.TLSPort)
+	self.tlsListen = listen
+	go self.acceptTLS()
 	return nil
 }
 
@@ -136,6 +156,17 @@ func (self *Node) acceptTCP() {
 	}
 }
 
+func (self *Node) acceptTLS() {
+	c := self.dataChannel.GetChannel()
+	for {
+		// 阻塞在这里，
+		//if conn, err := self.tcpListen.Accept(); err == nil {
+		if conn, err := self.tlsListen.Accept(); err == nil {
+			//conn.SetKeepAlive(true)
+			self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession, self.wg))
+		}
+	}
+}
 func (self *Node) acceptWs(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -200,8 +231,9 @@ func New(ctx *cli.Context) *Node {
 		wg:           &sync.WaitGroup{},
 		sessionMap:   make(map[string]*core.Session),
 		cleanSession: make(chan string, 4096),
-		Port:         config.GetInt("port", 4222),   //ctx.GlobalInt("port"),
-		WSPort:       config.GetInt("wsport", 4224), //ctx.GlobalInt("wsport"),
+		Port:         config.GetInt("port", 4222),    //ctx.GlobalInt("port"),
+		WSPort:       config.GetInt("wsport", 4224),  //ctx.GlobalInt("wsport"),
+		TLSPort:      config.GetInt("tlsport", 4333), //ctx.GlobalInt("wsport"),
 		stop:         make(chan int),
 	}
 	dbaddr := config.GetString("dbaddr", "localhost:6379")

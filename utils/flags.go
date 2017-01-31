@@ -14,10 +14,10 @@ var (
 		Usage: "Network listening websocket port",
 		Value: config.GetDef("wsport").(int),
 	}
-	ListenSSLPortFlag = cli.IntFlag{
-		Name:  "sslport",
+	ListenTLSPortFlag = cli.IntFlag{
+		Name:  "tlsport",
 		Usage: "TODO:Network listening port",
-		Value: config.GetDef("sslport").(int),
+		Value: config.GetDef("tlsport").(int),
 	}
 	ListenRPCPortFlag = cli.IntFlag{
 		Name:  "rpcport",
@@ -78,7 +78,7 @@ func InitFlags() []cli.Flag {
 		/*
 			ListenPortFlag,
 			ListenWSPortFlag,
-			ListenSSLPortFlag,
+			ListenTLSPortFlag,
 			ListenRPCPortFlag,
 			LogfileFlag,
 			LogLevelFlag,

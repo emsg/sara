@@ -118,6 +118,7 @@ func sara(ctx *cli.Context) error {
 	service.StartRPC(currentnode)
 	currentnode.StartTCP()
 	currentnode.StartWS()
+	currentnode.StartTLS()
 	savePid()
 	currentnode.Wait()
 	log4go.Info("👋  server shutdown success.")

@@ -364,8 +364,8 @@ func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node Mes
 }
 
 //TODO 通过 tls 创建 session
-func NewTlsSession() {
-
+func NewTlsSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
+	return nil
 }
 
 func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
