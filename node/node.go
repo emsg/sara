@@ -78,6 +78,7 @@ func (self *Node) StartTCP() error {
 	return nil
 }
 
+/*
 func (self *Node) StartWSS() error {
 	certfile := config.GetString("certfile", "/etc/sara/server.pem")
 	keyfile := config.GetString("keyfile", "/etc/sara/server.key")
@@ -89,7 +90,30 @@ func (self *Node) StartWSS() error {
 	log4go.Info("wss start on [%s]", addr)
 	return nil
 }
-
+*/
+func (self *Node) StartWSS() error {
+	certfile := config.GetString("certfile", "/etc/sara/server.pem")
+	keyfile := config.GetString("keyfile", "/etc/sara/server.key")
+	cert, err := tls.LoadX509KeyPair(certfile, keyfile)
+	if err != nil {
+		log4go.Error("Fail start wss ; err = %s", err)
+		return err
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}}
+	addr := fmt.Sprintf(":%d", self.WSSPort)
+	listen, err := tls.Listen("tcp", addr, config)
+	if err != nil {
+		log4go.Error("Fail start wss; err = %s", err)
+		return err
+	}
+	log4go.Info("wss start on [0.0.0.0:%d]", self.WSSPort)
+	self.wssListen = listen
+	go func() {
+		http.Serve(listen, &WSHandler{node: self})
+	}()
+	log4go.Info("wss start on [%d]", self.WSSPort)
+	return nil
+}
 func (self *Node) StartTLS() error {
 	certfile := config.GetString("certfile", "/etc/sara/server.pem")
 	keyfile := config.GetString("keyfile", "/etc/sara/server.key")
