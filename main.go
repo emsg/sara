@@ -29,6 +29,7 @@ var (
 	app         *cli.App
 	cpu_log     string = "/tmp/sara_cpu.out"
 	mem_log     string = "/tmp/sara_mem.out"
+	blk_log     string = "/tmp/sara_blk.out"
 	pidf        string = "/tmp/sara.pid"
 	currentnode *node.Node
 )
@@ -69,7 +70,7 @@ func init() {
 		{
 			Name:     "makeconn",
 			Usage:    "创建指定个数的连接，测试最大连接数",
-			Category: "test",
+			Category: "benchmark",
 			Flags:    utils.InitFlagsForTestOfMakeConn(),
 			Action:   makeconnForTest,
 		},
@@ -86,6 +87,7 @@ func init() {
 			log4go.Warn("start collection cpu and mem profile ... ")
 			startCpuProfiles()
 			startMemProfiles()
+			startBlockProfile()
 		}
 		return nil
 	}
@@ -116,9 +118,18 @@ func sara(ctx *cli.Context) error {
 	signalHandler(ctx)
 	currentnode = node.New(ctx)
 	service.StartRPC(currentnode)
-	currentnode.StartTCP()
-	currentnode.StartWS()
-	currentnode.StartTLS()
+	if config.GetBool("enable_tcp", true) {
+		currentnode.StartTCP()
+	}
+	if config.GetBool("enable_ws", true) {
+		currentnode.StartWS()
+	}
+	if config.GetBool("enable_tls", true) {
+		currentnode.StartTLS()
+	}
+	if config.GetBool("enable_wss", true) {
+		currentnode.StartWSS()
+	}
 	savePid()
 	currentnode.Wait()
 	log4go.Info("👋  server shutdown success.")
@@ -181,12 +192,24 @@ func startCpuProfiles() {
 	}
 }
 
+func startBlockProfile() {
+	runtime.SetBlockProfileRate(1)
+}
+
 func startMemProfiles() {
 	runtime.MemProfileRate = 1 * 1024
 }
 
 func stopCpuProfiles() {
 	pprof.StopCPUProfile()
+}
+
+func stopBlockProfile() {
+	f, _ := os.Create(blk_log)
+	if err := pprof.Lookup("block").WriteTo(f, 0); err != nil {
+		fmt.Fprintf(os.Stderr, "Can not write %s: %s", *f, err)
+	}
+	f.Close()
 }
 
 func stopMemProfiles() {
@@ -217,6 +240,7 @@ func signalHandler(ctx *cli.Context) {
 				if ctx.GlobalBool("debug") {
 					stopCpuProfiles()
 					stopMemProfiles()
+					stopBlockProfile()
 					log4go.Warn("stop collection cpu and mem profile ... ")
 				}
 			case syscall.SIGTSTP:

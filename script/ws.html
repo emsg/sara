@@ -9,12 +9,19 @@
 <script>
 var ws = null;
 function connect(){
-    ws = new WebSocket('ws://127.0.0.1:4224');
+    ws = new WebSocket('wss://localhost:4334/')
+    //ws = new WebSocket('wss://localhost:4334/', {
+    //          protocolVersion: 8,
+    //          origin: 'https://localhost:4334',
+    //          rejectUnauthorized: false
+    //     });
+    //ws = new WebSocket('wss://127.0.0.1:4224');
     ws.onerror = function(e){
-        console.log("error ==> "+e.data)
+        console.log("error ==> "+e);
+        open("https://localhost:4334/")
     }
     ws.onclose = function(e){
-        console.log("close ==> "+e.data)
+        console.log("close ==> "+e)
     }
     ws.onmessage = function(e){
         var data = e.data

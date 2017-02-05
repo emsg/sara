@@ -37,3 +37,9 @@ const (
 	STATUS_LOGIN        = "login"
 	STATUS_CLOSE        = "close"
 )
+
+//store perfix
+const (
+	SESSION_PERFIX string = "session_"
+	OFFLINE_PERFIX string = "offline_"
+)

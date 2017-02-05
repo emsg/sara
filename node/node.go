@@ -19,17 +19,27 @@ import (
 	"github.com/urfave/cli"
 )
 
+type WSHandler struct {
+	node *Node
+}
+
+func (self *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	self.node.acceptWs(w, r)
+}
+
 type Node struct {
-	wg                    *sync.WaitGroup
-	Nodeid, name          string
-	sessionMap            map[string]*core.Session //all avaliable session
-	Port, TLSPort, WSPort int
-	stop                  chan int
-	cleanSession          chan string
-	tcpListen             *net.TCPListener
-	tlsListen             net.Listener
-	db                    saradb.Database //SessionStatus db
-	dataChannel           sararpc.DataChannel
+	lock                           *sync.RWMutex
+	wg                             *sync.WaitGroup
+	Nodeid, name                   string
+	sessionMap                     map[string]*core.Session //all avaliable session
+	Port, TLSPort, WSPort, WSSPort int
+	stop                           chan int
+	cleanSession                   chan string
+	tcpListen                      *net.TCPListener
+	tlsListen                      net.Listener
+	wsListen, wssListen            net.Listener
+	db                             saradb.Database //SessionStatus db
+	dataChannel                    sararpc.DataChannel
 }
 
 var upgrader = websocket.Upgrader{
@@ -41,12 +51,19 @@ func (self *Node) GetDB() saradb.Database {
 }
 
 func (self *Node) StartWS() error {
-	addr := fmt.Sprintf("0.0.0.0:%d", self.WSPort)
+	listen, err := net.ListenTCP("tcp", &net.TCPAddr{net.ParseIP("0.0.0.0"), self.WSPort, ""})
+	if err != nil {
+		log4go.Error("Fail start ws; err = %s", err)
+		return err
+	}
+	self.wsListen = listen
+	//addr := fmt.Sprintf("0.0.0.0:%d", self.WSPort)
 	go func() {
-		http.HandleFunc("/", self.acceptWs)
-		http.ListenAndServe(addr, nil)
+		//http.HandleFunc("/", self.acceptWs)
+		http.Serve(listen, &WSHandler{node: self})
+		//http.ListenAndServe(addr, &WSHandler{node: self})
 	}()
-	log4go.Info("ws start on [%s]", addr)
+	log4go.Info("ws start on [%d]", self.WSPort)
 	return nil
 }
 func (self *Node) StartTCP() error {
@@ -60,8 +77,23 @@ func (self *Node) StartTCP() error {
 	go self.acceptTCP()
 	return nil
 }
+
+func (self *Node) StartWSS() error {
+	certfile := config.GetString("certfile", "/etc/sara/server.pem")
+	keyfile := config.GetString("keyfile", "/etc/sara/server.key")
+	addr := fmt.Sprintf("0.0.0.0:%d", self.WSSPort)
+	go func() {
+		//http.HandleFunc("/", self.acceptWs)
+		http.ListenAndServeTLS(addr, certfile, keyfile, &WSHandler{node: self})
+	}()
+	log4go.Info("wss start on [%s]", addr)
+	return nil
+}
+
 func (self *Node) StartTLS() error {
-	cert, err := tls.LoadX509KeyPair("/etc/sara/server.pem", "/etc/sara/server.key")
+	certfile := config.GetString("certfile", "/etc/sara/server.pem")
+	keyfile := config.GetString("keyfile", "/etc/sara/server.key")
+	cert, err := tls.LoadX509KeyPair(certfile, keyfile)
 	if err != nil {
 		log4go.Error("Fail start node ; err = %s", err)
 		return err
@@ -79,19 +111,44 @@ func (self *Node) StartTLS() error {
 	return nil
 }
 
-func (self *Node) Wait() {
-	if self.tcpListen == nil {
-		return
+func (self *Node) closeListener() {
+	if self.tcpListen != nil {
+		log4go.Warn("close tcp listen.")
+		self.tcpListen.Close()
 	}
+	if self.tlsListen != nil {
+		log4go.Warn("close tls listen.")
+		self.tlsListen.Close()
+	}
+	if self.wsListen != nil {
+		log4go.Warn("close ws listen.")
+		self.wsListen.Close()
+	}
+	if self.wssListen != nil {
+		log4go.Warn("close wss listen.")
+		self.wssListen.Close()
+	}
+}
+
+func (self *Node) Wait() {
+	//if self.tcpListen == nil {
+	//	return
+	//}
 	<-self.stop
+	self.closeListener() // 关闭所有服务端口，停止接收新session
+	log4go.Info("⛑️  begin security shutdown.")
 	//shutdown
+	i := 0
 	for _, s := range self.sessionMap {
 		s.CloseSession("node_stop")
+		i++
 	}
+	log4go.Info("please wait session close. total=%d , clean=%d", len(self.sessionMap), i)
 	self.wg.Wait()
+	log4go.Info("session close success")
 	self.db.Close()
 	//defer self.tcpListen.Close()
-	log4go.Info("node shutdown success.")
+	log4go.Info("security shutdown success.")
 }
 
 func (self *Node) Stop() {
@@ -103,21 +160,31 @@ func (self *Node) clean() {
 		recover()
 	}()
 	for sid := range self.cleanSession {
-		log4go.Debug("clean_session sid=%s", sid)
+		self.lock.Lock()
 		delete(self.sessionMap, sid)
+		log4go.Debug("clean_session_success sid=%s", sid)
+		self.lock.Unlock()
 	}
+}
+func (self *Node) fetchSession(sid string) (session *core.Session, ok bool) {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+	session, ok = self.sessionMap[sid]
+	return
 }
 func (self *Node) registerSession(session *core.Session) {
 	if sid := session.Status.Sid; sid != "" {
 		log4go.Debug("reg_session sid=%s", sid)
+		self.lock.Lock()
 		self.sessionMap[sid] = session
+		self.lock.Unlock()
 	}
 }
 
 //implements MessageRouter interface >>>>>>>>
 func (self *Node) Route(channel, sid string, packet *types.Packet, signal ...byte) {
 	if channel == "" || self.dataChannel.GetChannel() == channel {
-		if session, ok := self.sessionMap[sid]; ok {
+		if session, ok := self.fetchSession(sid); ok {
 			if signal != nil {
 				log4go.Debug("👮 node.route_signal -> %s", signal)
 				if signal[0] == types.KILL {
@@ -228,12 +295,14 @@ func (self *Node) cleanGhostSession() {
 //TODO 如何控制 nodeid 全局唯一，是否需要 gossip ?
 func New(ctx *cli.Context) *Node {
 	node := &Node{
+		lock:         &sync.RWMutex{},
 		wg:           &sync.WaitGroup{},
 		sessionMap:   make(map[string]*core.Session),
 		cleanSession: make(chan string, 4096),
-		Port:         config.GetInt("port", 4222),    //ctx.GlobalInt("port"),
-		WSPort:       config.GetInt("wsport", 4224),  //ctx.GlobalInt("wsport"),
-		TLSPort:      config.GetInt("tlsport", 4333), //ctx.GlobalInt("wsport"),
+		Port:         config.GetInt("port", 4222),
+		WSPort:       config.GetInt("wsport", 4224),
+		TLSPort:      config.GetInt("tlsport", 4333),
+		WSSPort:      config.GetInt("wssport", 4334),
 		stop:         make(chan int),
 	}
 	dbaddr := config.GetString("dbaddr", "localhost:6379")

@@ -22,7 +22,7 @@ func (self *WsSessionConn) ReadPacket(part []byte) ([][]byte, []byte, error) {
 		// 其实 eof/timeout/others 都无所谓，session 单独处理 eof
 		// 只是想给一个通知,简单起见，这个可以没有
 		log4go.Debug("🌍  --> err = %s , %v", err.Error(), err)
-		return nil, part, err
+		return nil, nil, err
 	} else {
 		return [][]byte{p}, part, nil
 	}

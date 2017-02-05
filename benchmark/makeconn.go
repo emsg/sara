@@ -9,6 +9,7 @@ import (
 	"sara/core/types"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golibs/uuid"
@@ -30,13 +31,14 @@ var (
 	messageTemplate string = `{"envelope":{"from":"%s@a.a","to":"%s@a.a","type":1,"id":"%s"},"vsn":"0.0.1","payload":{"content":"%s"}}`
 	localPortPoolCh chan int
 	si              *sessionIndex
+	sendMessage     bool = false
 )
 
 type sessionIndex struct {
 	uidMap          map[string]int // all jid reg here,use for send target
 	uidArr          []string
-	send, recv, per int //counter
-	lock            sync.RWMutex
+	send, recv, per int32 //counter
+	lock            *sync.RWMutex
 	r               *rand.Rand
 }
 
@@ -59,7 +61,7 @@ func (self *sessionIndex) del(uid string) {
 
 //发消息时，从这里随机一个 to
 func (self *sessionIndex) rand(uid string) string {
-	idx := self.r.Intn(len(self.uidArr) - 1)
+	idx := self.r.Intn(int(len(self.uidArr) - 1))
 	to := self.uidArr[idx]
 	if uid == to {
 		return self.rand(uid)
@@ -67,33 +69,34 @@ func (self *sessionIndex) rand(uid string) string {
 	return to
 }
 func (self *sessionIndex) counter(action, from, to string) {
-	self.lock.Lock()
-	defer self.lock.Unlock()
 	switch action {
 	case "W":
-		self.send += 1
+		atomic.AddInt32(&self.send, 1)
 	case "R":
-		self.recv += 1
+		atomic.AddInt32(&self.recv, 1)
 	}
 }
 
 func (self *sessionIndex) showStatus() {
-	st, rt := 0, 0
+	sendMessage = true
+	var st, rt int32
 	fmt.Println("----------------------------")
 	fmt.Println("SEND\tRECV\tSEND/s\tRECV/s\t")
 	for {
 		if self.recv > 0 && self.send > 0 {
 			select {
-			case <-time.After(time.Duration(time.Second * 2)):
-				if st == 0 || rt == 0 {
-					//第一次不算
-					st, rt = self.send, self.recv
-				} else {
+			case <-time.After(time.Duration(time.Second * 4)):
+				//第一次不算
+				_st := atomic.LoadInt32(&self.send)
+				_rt := atomic.LoadInt32(&self.recv)
+				if st > 0 && rt > 0 {
 					//从第二次有结果开始显示
-					ps := (self.send - st) / 2 //每秒写
-					pr := (self.recv - rt) / 2 //每秒读
+					ps := (_st - st) / 4 //每秒写
+					pr := (_rt - rt) / 4 //每秒读
 					fmt.Printf("\r\b%d\t%d\t%d\t%d", self.send, self.recv, ps, pr)
 				}
+				atomic.StoreInt32(&st, _st)
+				atomic.StoreInt32(&rt, _rt)
 			}
 		} else {
 			time.Sleep(time.Duration(time.Second * 2))
@@ -108,6 +111,7 @@ func newSessionIndex() *sessionIndex {
 		uidMap: make(map[string]int),
 		uidArr: make([]string, 0),
 		r:      r,
+		lock:   new(sync.RWMutex),
 	}
 	return si
 }
@@ -161,7 +165,7 @@ func (self *client) start() {
 						case <-s:
 							break EndW
 						case <-time.After(time.Second * time.Duration(messageGap)):
-							if len(content) > 0 {
+							if len(content) > 0 && sendMessage {
 								id := uuid.Rand().Hex()
 								from := self.uid
 								to := si.rand(self.uid)
@@ -272,7 +276,10 @@ func MakeConn(laddr, addr string, total, hb, mg, ms int) {
 	ll := len(strings.Split(localAddr, ","))
 	fmt.Println("cpu core:", cpu, " worker:", cpu*2)
 	fmt.Println("😊  total:", total*ll, "finished , fail:", fail, " time:", (e - s), "ms. heartbeat:", hb)
-	go si.showStatus()
+
+	if messageSize > 0 {
+		go si.showStatus()
+	}
 	close(addrQueue)
 	close(finish)
 	<-stop

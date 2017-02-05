@@ -37,7 +37,7 @@ type MessageRouter interface {
 
 const (
 	LOGIN_TIMEOUT   int    = 5
-	SESSION_TIMEOUT        = 120
+	SESSION_TIMEOUT        = 90
 	OFFLINE_EXPIRED        = 3600 * 24 * 7 //default 7days
 	SERVER_ACK      string = "server_ack"
 )
@@ -147,7 +147,12 @@ func (self *Session) heartbeat() {
 	if self.Status.Status == types.STATUS_LOGIN {
 		hb := []byte{types.HEART_BEAT}
 		self.SendMessage(hb)
-		self.storeSessionStatus()
+		//self.storeSessionStatus()
+		j, _ := types.NewJID(self.Status.Jid)
+		key := j.ToSessionid()
+		if _, err := self.ssdb.ResetExpire(key, SESSION_TIMEOUT); err != nil {
+			self.CloseSession("heart_beat_on_lost_session")
+		}
 		log4go.Debug("❤️  %s ->%d", self.Status.Jid, hb)
 	}
 }
@@ -208,7 +213,7 @@ func (self *Session) SendMessage(data []byte) (int, error) {
 }
 
 func (self *Session) CloseSession(tracemsg string) {
-	log4go.Debug("session_close at %s ; sid=%s ; jid=%s", tracemsg, self.Status.Sid, self.Status.Jid)
+	log4go.Info("session_close at %s ; sid=%s ; jid=%s", tracemsg, self.Status.Sid, self.Status.Jid)
 	self.clean <- self.Status.Sid
 	if self.Status.Status == types.STATUS_LOGIN {
 		j, _ := types.NewJID(self.Status.Jid)
@@ -378,7 +383,7 @@ func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRout
 		ssdb:    ssdb,
 		node:    node,
 		sc:      sc,
-		packets: make(chan []byte, 32),
+		packets: make(chan []byte, 16),
 	}
 	go session.receive()
 	return session

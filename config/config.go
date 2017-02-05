@@ -112,6 +112,9 @@ func LoadFromConf(c *cli.Context) {
 	if r := gjson.Get(j, "tlsport"); r.Exists() {
 		SetInt("tlsport", int(r.Int()))
 	}
+	if r := gjson.Get(j, "wssport"); r.Exists() {
+		SetInt("wssport", int(r.Int()))
+	}
 	if r := gjson.Get(j, "rpcport"); r.Exists() {
 		SetInt("rpcport", int(r.Int()))
 	}
@@ -139,12 +142,32 @@ func LoadFromConf(c *cli.Context) {
 	if r := gjson.Get(j, "dc"); r.Exists() {
 		SetString("dc", r.String())
 	}
+	if r := gjson.Get(j, "certfile"); r.Exists() {
+		SetString("certfile", r.String())
+	}
+	if r := gjson.Get(j, "keyfile"); r.Exists() {
+		SetString("keyfile", r.String())
+	}
 	if r := gjson.Get(j, "enable_auth"); r.Exists() {
 		SetBool("enable_auth", r.Bool())
 	}
 	if r := gjson.Get(j, "enable_offline_callback"); r.Exists() {
 		SetBool("enable_offline_callback", r.Bool())
 	}
+
+	if r := gjson.Get(j, "enable_tcp"); r.Exists() {
+		SetBool("enable_tcp", r.Bool())
+	}
+	if r := gjson.Get(j, "enable_tls"); r.Exists() {
+		SetBool("enable_tls", r.Bool())
+	}
+	if r := gjson.Get(j, "enable_ws"); r.Exists() {
+		SetBool("enable_ws", r.Bool())
+	}
+	if r := gjson.Get(j, "enable_wss"); r.Exists() {
+		SetBool("enable_wss", r.Bool())
+	}
+
 }
 
 func LoadFromCtx(ctx *cli.Context) {
@@ -171,9 +194,10 @@ var Template string = `
     "port": 4222,
     "wsport": 4224,
     "tlsport": 4333,
+    "wssport": 4334,
     "rpcport": 4280,
-	"accesstoken":"http-rpc access token",
-	"nodeid":"n01",
+    "accesstoken":"http-rpc access token",
+    "nodeid":"n01",
     "dbaddr": "localhost:6379",
     "dbpool":100,
     "callback":"",
@@ -181,7 +205,13 @@ var Template string = `
     "logfile":"/tmp/sara.log",
     "loglevel":3,
     "dc":"dc01",
-	"enable_auth":true,
-	"enable_offline_callback":true
+    "certfile":"/etc/sara/server.pem",
+    "keyfile":"/etc/sara/server.key",
+    "enable_tcp":true,
+    "enable_tls":true,
+    "enable_ws":true,
+    "enable_wss":true,
+    "enable_auth":true,
+    "enable_offline_callback":true
 }
 `

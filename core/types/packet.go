@@ -159,11 +159,11 @@ func (self *JID) StringWithoutResource() string {
 }
 
 func (self *JID) ToSessionid() []byte {
-	return []byte("session_" + self.StringWithoutResource())
+	return []byte(SESSION_PERFIX + self.StringWithoutResource())
 }
 
 func (self *JID) ToOfflineKey() []byte {
-	return []byte("offline_" + self.StringWithoutResource())
+	return []byte(OFFLINE_PERFIX + self.StringWithoutResource())
 }
 
 func (self *JID) String() string {

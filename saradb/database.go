@@ -1,8 +1,11 @@
 package saradb
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"sara/core/types"
+	"sync/atomic"
 	//"sara/utils"
 	"sync"
 	"time"
@@ -15,7 +18,8 @@ import (
 )
 
 var (
-	IDX_SUFFIX = []byte("_idx")
+	IDX_SUFFIX     = []byte("_idx")
+	SESSION_PERFIX = types.SESSION_PERFIX
 )
 
 type DBMODEL int
@@ -23,6 +27,7 @@ type DBMODEL int
 type writeBufArgs struct {
 	cmd  string
 	args []interface{}
+	resp chan *redis.Resp
 }
 
 const (
@@ -31,28 +36,34 @@ const (
 )
 
 type SaraDatabase struct {
-	Addr         string
-	PoolSize     int
-	c_cli        *cluster.Cluster
-	p_cli        *pool.Pool
-	model        DBMODEL
-	stop         chan struct{}
-	tl           bool
-	wbCh         chan writeBufArgs //异步的写操作缓冲区
-	wbTotal      int               //写操作工作线程数
-	wbSyncChList []chan int        //同步写操作工作线程
-	wg           *sync.WaitGroup   //同步写操作工作线程
-	lock         *sync.RWMutex
+	Addr           string
+	PoolSize       int
+	c_cli          *cluster.Cluster
+	p_cli          *pool.Pool
+	model          DBMODEL
+	stop           chan struct{}
+	tl             bool
+	wbCh           chan writeBufArgs //异步的写操作缓冲区
+	wbCh4s         chan writeBufArgs //异步的写操作缓冲区,for session
+	wbSyncChList   []chan int        //同步写操作工作线程
+	wbSyncChList4s []chan int        //同步写操作工作线程,for session
+	wg             *sync.WaitGroup   //同步写操作工作线程
 }
 
-func (self *SaraDatabase) wbfConsumerWorker(wbSyncCh chan int) {
+func (self *SaraDatabase) wbfConsumerWorker(wbSyncCh chan int, wbCh chan writeBufArgs, _wbTotal int32) {
+	wbTotal := atomic.LoadInt32(&_wbTotal)
 	uuid := uuid.Rand().Hex()
 	defer self.wg.Done()
 	var kill, send_kill bool
 EndLoop:
 	for {
 		select {
-		case wb := <-self.wbCh:
+		case wb, wbOk := <-wbCh: //异步的写都在这里缓冲
+			//channel closed
+			if !wbOk {
+				log4go.Debug("closed wbCh ...")
+				break EndLoop
+			}
 			if kill && !send_kill {
 				//log4go.Info("%s 🔪  %v,%v", uuid, kill, send_kill)
 				wb := writeBufArgs{cmd: "KILL"}
@@ -60,25 +71,26 @@ EndLoop:
 				send_kill = true
 			}
 			if wb.cmd == "KILL" {
-				if self.wbTotal > 1 {
-					self.lock.Lock()
-					self.wbTotal -= 1
+				if wbTotal > 1 {
+					atomic.AddInt32(&wbTotal, -1)
 					//自杀吧
-					self.lock.Unlock()
 					break EndLoop
 				} else {
-					log4go.Info("%s ⌛️  %d", uuid, self.wbTotal)
+					log4go.Info("%s ⌛️  %d", uuid, wbTotal)
 				}
 			} else {
-				self.executeDirect(wb.cmd, wb.args...)
+				log4go.Debug("handler : %s %s", wb.cmd, wb.args)
+				if wb.resp == nil {
+					self.executeDirect(wb.cmd, wb.args...)
+				} else {
+					wb.resp <- self.executeDirect(wb.cmd, wb.args...)
+				}
 			}
 		case <-wbSyncCh:
 			kill = true
 		case <-time.After(time.Duration(2 * time.Second)):
 			if kill {
-				self.lock.Lock()
-				self.wbTotal -= 1
-				self.lock.Unlock()
+				atomic.AddInt32(&wbTotal, -1)
 				break EndLoop
 			}
 		}
@@ -86,20 +98,26 @@ EndLoop:
 }
 
 func (self *SaraDatabase) wbfConsumer() {
-	consumerTotal := 10
+	consumerTotal := 20
 	if self.PoolSize > 200 {
-		consumerTotal = self.PoolSize / 20
+		consumerTotal = self.PoolSize / 10
 	}
-	log4go.Info("write buffer started ; total consume [%d]", consumerTotal)
 	wbSyncChList := make([]chan int, 0)
-	self.wbTotal = consumerTotal
-	self.wg.Add(consumerTotal)
+	wbSyncChList4s := make([]chan int, 0)
+	self.wg.Add(consumerTotal * 2)
+	log4go.Info("write buffer started ; total consume [%d]", consumerTotal*2)
 	for i := 0; i < consumerTotal; i++ {
 		wbSyncCh := make(chan int)
-		go self.wbfConsumerWorker(wbSyncCh)
+		go self.wbfConsumerWorker(wbSyncCh, self.wbCh, int32(consumerTotal))
 		wbSyncChList = append(wbSyncChList, wbSyncCh)
 	}
+	for i := 0; i < consumerTotal; i++ {
+		wbSyncCh4s := make(chan int)
+		go self.wbfConsumerWorker(wbSyncCh4s, self.wbCh4s, int32(consumerTotal))
+		wbSyncChList4s = append(wbSyncChList4s, wbSyncCh4s)
+	}
 	self.wbSyncChList = wbSyncChList
+	self.wbSyncChList4s = wbSyncChList4s
 }
 
 func (self *SaraDatabase) getRedisClient(k string) (r *redis.Client) {
@@ -114,12 +132,34 @@ func (self *SaraDatabase) getRedisClient(k string) (r *redis.Client) {
 	return
 }
 
+func (self *SaraDatabase) ResetExpire(key []byte, ex int) (t int, err error) {
+	if r := self.execute4s_sync("Expire", key, ex); r.Err != nil {
+		t, err = 0, r.Err
+	} else {
+		if i, e := r.Int(); e != nil {
+			t, err = 0, e
+		} else if i == 0 {
+			t, err = 0, errors.New("key_not_found")
+		} else {
+			t = i
+		}
+	}
+	return
+}
 func (self *SaraDatabase) Put(key []byte, value []byte) error {
-	self.execute("SET", key, value)
+	if self.is4s(key) {
+		self.execute4s("SET", key, value)
+	} else {
+		self.execute("SET", key, value)
+	}
 	return nil
 }
 func (self *SaraDatabase) PutEx(key []byte, value []byte, ex int) error {
-	self.execute("SETEX", key, ex, value)
+	if self.is4s(key) {
+		self.execute4s("SETEX", key, ex, value)
+	} else {
+		self.execute("SETEX", key, ex, value)
+	}
 	return nil
 }
 
@@ -128,27 +168,38 @@ func (self *SaraDatabase) Get(key []byte) ([]byte, error) {
 	return r.Bytes()
 }
 func (self *SaraDatabase) Delete(key []byte) error {
-	r := self.execute("DEL", key)
+	var r *redis.Resp
+	if self.is4s(key) {
+		r = self.execute4s("DEL", key)
+	} else {
+		r = self.execute("DEL", key)
+	}
 	if r != nil && r.Err != nil {
 		return r.Err
 	}
 	return nil
 }
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
-	//r := self.execute("ZADD", idx, utils.Timestamp13(), key)
-	//val := fmt.Sprintf("%d%s", utils.Timestamp13(), key)
 	idx = append(idx, IDX_SUFFIX...)
-	r := self.execute("HSET", idx, key, value)
-	if r != nil && r.Err != nil {
-		return r.Err
-	}
-	if ex > 0 {
-		r = self.execute("SETEX", key, ex, value)
+	if self.is4s(key) {
+		self.execute4s("HSET", idx, key, value)
+		if ex > 0 {
+			self.execute4s("SETEX", key, ex, value)
+		} else {
+			self.execute4s("SET", key, value)
+		}
 	} else {
-		r = self.execute("SET", key, value)
-	}
-	if r != nil && r.Err != nil {
-		return r.Err
+		defer func() {
+			if e := recover(); e != nil {
+				log4go.Error(e)
+			}
+		}()
+		self.execute("HSET", idx, key, value)
+		if ex > 0 {
+			self.execute("SETEX", key, ex, value)
+		} else {
+			self.execute("SET", key, value)
+		}
 	}
 	return nil
 }
@@ -162,22 +213,16 @@ func (self *SaraDatabase) DeleteByIdx(idx []byte) error {
 		}
 	}
 	self.Delete(idx)
-	/*
-		if ids, err := self.executeDirect("ZRANGE", idx, 0, -1).ListBytes(); err != nil {
-			return err
-		} else {
-			for _, k := range ids {
-				self.Delete(k)
-			}
-		}
-	*/
 	return nil
 }
 
 func (self *SaraDatabase) DeleteByIdxKey(idx, key []byte) error {
 	idx = append(idx, IDX_SUFFIX...)
-	self.execute("HDEL", idx, key)
-	//self.execute("ZREM", idx, key)
+	if self.is4s(key) {
+		self.execute4s("HDEL", idx, key)
+	} else {
+		self.execute("HDEL", idx, key)
+	}
 	self.Delete(key)
 	return nil
 }
@@ -200,9 +245,17 @@ func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
 func (self *SaraDatabase) Close() {
 	self.stop <- struct{}{}
 	log4go.Info("wait_close_db")
-	for i, wbSyncCh := range self.wbSyncChList {
-		wbSyncCh <- i
-		log4go.Info("👷  consumer %d closed... (total:%d)", i, len(self.wbSyncChList))
+	//非 session 的缓冲区直接关闭，丢掉所有未处理消息,主要同步处理 session
+	//暴力关闭
+	close(self.wbCh)
+	//for i, wbSyncCh := range self.wbSyncChList {
+	//	wbSyncCh <- i
+	//	log4go.Info("👷  consumer %d closed... (total:%d)", i, len(self.wbSyncChList))
+	//}
+	//安全关闭
+	for i, wbSyncCh4s := range self.wbSyncChList4s {
+		wbSyncCh4s <- i
+		log4go.Info("👔  consumer4s %d closed... (total:%d)", i, len(self.wbSyncChList4s))
 	}
 	self.wg.Wait()
 	switch self.model {
@@ -223,13 +276,21 @@ over:
 			log4go.Debug("♨️  kill keeplive thread.")
 			break over
 		default:
-			r := self.execute("SETEX", k, 4, 1)
+			r := self.executeDirect("SETEX", k, 4, 1)
 			if self.tl {
 				log4go.Debug("🐎  %s", r.String())
 			}
 			time.Sleep(4 * time.Second)
 		}
 	}
+}
+
+//是否为一个 session 相关的操作; 以 session_ 开头的 key
+func (self *SaraDatabase) is4s(key []byte) bool {
+	if i := bytes.Index(key, []byte(SESSION_PERFIX)); i == 0 {
+		return true
+	}
+	return false
 }
 
 func (self *SaraDatabase) initDb() error {
@@ -260,6 +321,7 @@ func (self *SaraDatabase) initClusterDb() error {
 	}
 }
 func (self *SaraDatabase) executeDirect(cmd string, args ...interface{}) (r *redis.Resp) {
+	//log4go.Debug("%s: %s", cmd, args)
 	switch self.model {
 	case MODEL_SINGLE:
 		r = self.p_cli.Cmd(cmd, args...)
@@ -268,14 +330,37 @@ func (self *SaraDatabase) executeDirect(cmd string, args ...interface{}) (r *red
 	}
 	return
 }
+
 func (self *SaraDatabase) execute(cmd string, args ...interface{}) *redis.Resp {
-	//TODO 通过队列进行缓冲
-	wb := writeBufArgs{
+	self.wbCh <- writeBufArgs{
 		cmd:  cmd,
 		args: args,
+		resp: nil,
 	}
-	//self.wg.Add(1)
-	self.wbCh <- wb
+	return nil
+}
+
+func (self *SaraDatabase) execute4s_sync(cmd string, args ...interface{}) *redis.Resp {
+	respCh := make(chan *redis.Resp)
+	log4go.Debug("sync write : %s %s", cmd, args)
+	self.wbCh4s <- writeBufArgs{
+		cmd:  cmd,
+		args: args,
+		resp: respCh,
+	}
+	// TODO timeout process
+	r := <-respCh
+	return r
+}
+
+//针对session 的操作，放到一个单独的通道上执行
+func (self *SaraDatabase) execute4s(cmd string, args ...interface{}) *redis.Resp {
+	log4go.Debug("async write : %s %s", cmd, args)
+	self.wbCh4s <- writeBufArgs{
+		cmd:  cmd,
+		args: args,
+		resp: nil,
+	}
 	return nil
 }
 
@@ -302,9 +387,9 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, 20000),
+		wbCh:     make(chan writeBufArgs, 10000),
+		wbCh4s:   make(chan writeBufArgs, 10000),
 		wg:       new(sync.WaitGroup),
-		lock:     new(sync.RWMutex),
 	}
 	if err := c.initDb(); err != nil {
 		return nil, err
@@ -317,9 +402,9 @@ func NewClusterDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, 20000),
+		wbCh:     make(chan writeBufArgs, 10000),
+		wbCh4s:   make(chan writeBufArgs, 10000),
 		wg:       new(sync.WaitGroup),
-		lock:     new(sync.RWMutex),
 	}
 	if err := c.initClusterDb(); err != nil {
 		return nil, err
