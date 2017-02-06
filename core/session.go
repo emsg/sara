@@ -236,6 +236,7 @@ func (self *Session) CloseSession(tracemsg string) {
 }
 
 // 这个方法只能处理 c2s 的请求，并不能处理 s2s
+//TODO 将 packet channel 变成普通数组传递进来，可取消一条线程,用 sc 来回调此函数
 func (self *Session) receive() {
 	self.wg.Add(1)
 	defer func() {
@@ -374,11 +375,6 @@ func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRo
 func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sc := NewWsSessionConn(conn)
 	return newSession(c, sc, ssdb, node, cleanSession, wg)
-}
-
-//TODO 通过 tls 创建 session
-func NewTlsSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
-	return nil
 }
 
 func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
