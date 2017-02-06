@@ -208,10 +208,10 @@ var Template string = `
     "certfile":"/etc/sara/server.pem",
     "keyfile":"/etc/sara/server.key",
     "enable_tcp":true,
-    "enable_tls":true,
+    "enable_tls":false,
     "enable_ws":true,
-    "enable_wss":true,
-    "enable_auth":true,
-    "enable_offline_callback":true
+    "enable_wss":false,
+    "enable_auth":false,
+    "enable_offline_callback":false
 }
 `
