@@ -89,29 +89,28 @@ OPTIONS:
 }
 ```
 <table>
-<tr><td>asdfaf</td></tr>
+<tr><td>port</td><td> 4222</td><td></td></tr>
+<tr><td>wsport</td><td> 4224</td><td></td></tr>
+<tr><td>tlsport</td><td> 4333</td><td></td></tr>
+<tr><td>wssport</td><td> 4334</td><td></td></tr>
+<tr><td>rpcport</td><td> 4280</td><td></td></tr>
+<tr><td>accesstoken</td><td>"8b035d3b57744b669dd8700bf694bc36"</td><td></td></tr>
+<tr><td>nodeid</td><td>"n01"</td><td></td></tr>
+<tr><td>dbaddr</td><td> "localhost:6379"</td><td></td></tr>
+<tr><td>dbpool</td><td>100</td><td></td></tr>
+<tr><td>callback</td><td>""</td><td></td><td> 
+<tr><td>nodeaddr</td><td> "localhost:4281"</td><td></td></tr>
+<tr><td>logfile</td><td>"/tmp/sara.log"</td><td></td></tr>
+<tr><td>loglevel</td><td>3</td><td></td></tr>
+<tr><td>dc</td><td>"dc01"</td><td></td></tr>
+<tr><td>certfile</td><td>"/etc/sara/server.pem"</td><td></td></tr>
+<tr><td>keyfile</td><td>"/etc/sara/server.key"</td><td></td></tr>
+<tr><td>enable_tcp</td><td>true</td><td></td></tr>
+<tr><td>enable_tls</td><td>true</td><td></td></tr>
+<tr><td>enable_ws</td><td>true</td><td></td></tr>
+<tr><td>enable_wss</td><td>true</td><td></td></tr>
+<tr><td>enable_auth</td><td>false</td><td></td></tr>
+<tr><td>enable_offline_callback</td><td>false</td><td></td></tr>
 </table>
-^参数^默认值^注释^
-|port| 4222||
-|wsport| 4224||
-|tlsport| 4333||
-|wssport| 4334||
-|rpcport| 4280||
-|accesstoken|"8b035d3b57744b669dd8700bf694bc36"||
-|nodeid|"n01"||
-|dbaddr| "localhost:6379"||
-|dbpool|100||
-|callback|""|| 
-|nodeaddr| "localhost:4281"||
-|logfile|"/tmp/sara.log"||
-|loglevel|3||
-|dc|"dc01"||
-|certfile|"/etc/sara/server.pem"||
-|keyfile|"/etc/sara/server.key"||
-|enable_tcp|true||
-|enable_tls|true||
-|enable_ws|true||
-|enable_wss|true||
-|enable_auth|false||
-|enable_offline_callback|false
+
 
