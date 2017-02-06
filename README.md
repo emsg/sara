@@ -52,7 +52,6 @@ GLOBAL OPTIONS:
 
 ###### sara setup -h
 ```
-bogon:sara liangc$ sara setup -h
 NAME:
    sara setup - 生成默认配置文件
 
@@ -62,3 +61,54 @@ USAGE:
 OPTIONS:
    --out value, -o value  配置文件全路径 (default: "/etc/sara/conf.json")
 ```
+###### /etc/sara/conf.json
+```
+{
+  "port": 4222,
+  "wsport": 4224,
+  "tlsport": 4333,
+  "wssport": 4334,
+  "rpcport": 4280,
+  "accesstoken": "8b035d3b57744b669dd8700bf694bc36",
+  "nodeid": "n01",
+  "dbaddr": "localhost:6379",
+  "dbpool": 100,
+  "callback": "",
+  "nodeaddr": "localhost:4281",
+  "logfile": "/tmp/sara.log",
+  "loglevel": 3,
+  "dc": "dc01",
+  "certfile": "/etc/sara/server.pem",
+  "keyfile": "/etc/sara/server.key",
+  "enable_tcp": true,
+  "enable_tls": true,
+  "enable_ws": true,
+  "enable_wss": true,
+  "enable_auth": false,
+  "enable_offline_callback": false
+}
+```
+^参数^默认值^注释^
+|port| 4222||
+|wsport| 4224||
+|tlsport| 4333||
+|wssport| 4334||
+|rpcport| 4280||
+|accesstoken|"8b035d3b57744b669dd8700bf694bc36"||
+|nodeid|"n01"||
+|dbaddr| "localhost:6379"||
+|dbpool|100||
+|callback|""|| 
+|nodeaddr| "localhost:4281"||
+|logfile|"/tmp/sara.log"||
+|loglevel|3||
+|dc|"dc01"||
+|certfile|"/etc/sara/server.pem"||
+|keyfile|"/etc/sara/server.key"||
+|enable_tcp|true||
+|enable_tls|true||
+|enable_ws|true||
+|enable_wss|true||
+|enable_auth|false||
+|enable_offline_callback|false
+
