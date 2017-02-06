@@ -61,56 +61,31 @@ USAGE:
 OPTIONS:
    --out value, -o value  配置文件全路径 (default: "/etc/sara/conf.json")
 ```
-###### /etc/sara/conf.json
-```
-{
-  "port": 4222,
-  "wsport": 4224,
-  "tlsport": 4333,
-  "wssport": 4334,
-  "rpcport": 4280,
-  "accesstoken": "8b035d3b57744b669dd8700bf694bc36",
-  "nodeid": "n01",
-  "dbaddr": "localhost:6379",
-  "dbpool": 100,
-  "callback": "",
-  "nodeaddr": "localhost:4281",
-  "logfile": "/tmp/sara.log",
-  "loglevel": 3,
-  "dc": "dc01",
-  "certfile": "/etc/sara/server.pem",
-  "keyfile": "/etc/sara/server.key",
-  "enable_tcp": true,
-  "enable_tls": true,
-  "enable_ws": true,
-  "enable_wss": true,
-  "enable_auth": false,
-  "enable_offline_callback": false
-}
-```
+###### 配置说明 : /etc/sara/conf.json
 <table>
-<tr><td>port</td><td> 4222</td><td></td></tr>
-<tr><td>wsport</td><td> 4224</td><td></td></tr>
-<tr><td>tlsport</td><td> 4333</td><td></td></tr>
-<tr><td>wssport</td><td> 4334</td><td></td></tr>
-<tr><td>rpcport</td><td> 4280</td><td></td></tr>
-<tr><td>accesstoken</td><td>"8b035d3b57744b669dd8700bf694bc36"</td><td></td></tr>
-<tr><td>nodeid</td><td>"n01"</td><td></td></tr>
-<tr><td>dbaddr</td><td> "localhost:6379"</td><td></td></tr>
-<tr><td>dbpool</td><td>100</td><td></td></tr>
-<tr><td>callback</td><td>""</td><td></td><td> 
-<tr><td>nodeaddr</td><td> "localhost:4281"</td><td></td></tr>
-<tr><td>logfile</td><td>"/tmp/sara.log"</td><td></td></tr>
-<tr><td>loglevel</td><td>3</td><td></td></tr>
-<tr><td>dc</td><td>"dc01"</td><td></td></tr>
-<tr><td>certfile</td><td>"/etc/sara/server.pem"</td><td></td></tr>
-<tr><td>keyfile</td><td>"/etc/sara/server.key"</td><td></td></tr>
-<tr><td>enable_tcp</td><td>true</td><td></td></tr>
-<tr><td>enable_tls</td><td>true</td><td></td></tr>
-<tr><td>enable_ws</td><td>true</td><td></td></tr>
-<tr><td>enable_wss</td><td>true</td><td></td></tr>
-<tr><td>enable_auth</td><td>false</td><td></td></tr>
-<tr><td>enable_offline_callback</td><td>false</td><td></td></tr>
+<tr><th>参数</th><th>默认值</th><th>说明</th></tr>
+<tr><td>port</td><td>4222</td><td>tcp 服务端口</td></tr>
+<tr><td>wsport</td><td>4224</td><td>websocket 服务端口</td></tr>
+<tr><td>tlsport</td><td>4333</td><td>tls 服务端口，单向认证</td></tr>
+<tr><td>wssport</td><td>4334</td><td>wss 服务端口，与tls使用同一个证书</td></tr>
+<tr><td>rpcport</td><td>4280</td><td>https://github.com/emsg/docs/wiki/RPC 功能接口</td></tr>
+<tr><td>accesstoken</td><td></td><td>调用RPC接口时提供的身份认证</td></tr>
+<tr><td>nodeid</td><td>n01</td><td>节点唯一标示，做集群时必须确保此属性唯一</td></tr>
+<tr><td>dbaddr</td><td>localhost:6379</td><td>redis地址，不启用 auth，支持单节点和 cluster </td></tr>
+<tr><td>dbpool</td><td>100</td><td>redis连接池大小</td></tr>
+<tr><td>callback</td><td>""</td><td>https://github.com/emsg/docs/wiki/RPC 回调接口</td><td> 
+<tr><td>nodeaddr</td><td> "localhost:4281"</td><td>节点间通信地址，做集群部署时使用</td></tr>
+<tr><td>logfile</td><td>"/tmp/sara.log"</td><td>日志文件</td></tr>
+<tr><td>loglevel</td><td>3</td><td>0:ERROR,1:WRAN,2:INFO,3:DEBUG</td></tr>
+<tr><td>dc</td><td>"dc01"</td><td>TODO:数据中心编号，跨数据中心部署</td></tr>
+<tr><td>keyfile</td><td>"/etc/sara/server.key"</td><td>私钥: openssl genrsa -out server.key 2048</td></tr>
+<tr><td>certfile</td><td>"/etc/sara/server.pem"</td><td>证书: openssl req -new -x509 -key server.key -out server.pem -days 3650</td></tr>
+<tr><td>enable_tcp</td><td>true</td><td>true:提供tcp服务,false:不提供tcp服务</td></tr>
+<tr><td>enable_tls</td><td>false</td><td>true:需要提供 keyfile 和 certfile，false:关闭 tls 服务</td></tr>
+<tr><td>enable_ws</td><td>true</td><td>true:提供websocket服务，false:不提供ws服务</td></tr>
+<tr><td>enable_wss</td><td>false</td><td>true:需要提供 keyfile 和 certfile，false:关闭 tls 服务</td></tr>
+<tr><td>enable_auth</td><td>false</td><td>开启认证，需要提供 callback 参数，并实现 auth 接口</td></tr>
+<tr><td>enable_offline_callback</td><td>false</td><td>开启离线消息回调，需要提供 callback 参数，并实现 offline 接口</td></tr>
 </table>
 
 
