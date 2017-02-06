@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sara/core"
 	"sara/core/types"
+	"sara/utils"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,9 +30,11 @@ var (
 	localAddr       string
 	sfpacket        string = `{"envelope":{"pwd":"123","jid":"%s@a.a","type":0,"id":"%s"},"vsn":"0.0.1"}`
 	messageTemplate string = `{"envelope":{"from":"%s@a.a","to":"%s@a.a","type":1,"id":"%s"},"vsn":"0.0.1","payload":{"content":"%s"}}`
+	messageAck      string = `{"envelope":{"type":3,"from":"%s","to":"server_ack","id":"%s"},"vsn":"0.0.1"}`
 	localPortPoolCh chan int
 	si              *sessionIndex
 	sendMessage     bool = false
+	sendMessageTs   int64
 )
 
 type sessionIndex struct {
@@ -79,25 +82,17 @@ func (self *sessionIndex) counter(action, from, to string) {
 
 func (self *sessionIndex) showStatus() {
 	sendMessage = true
-	var st, rt int32
-	fmt.Println("----------------------------")
+	ts := utils.Timestamp10()
+	fmt.Println("----------------------------", ts)
 	fmt.Println("SEND\tRECV\tSEND/s\tRECV/s\t")
 	for {
 		if self.recv > 0 && self.send > 0 {
-			select {
-			case <-time.After(time.Duration(time.Second * 4)):
-				//第一次不算
-				_st := atomic.LoadInt32(&self.send)
-				_rt := atomic.LoadInt32(&self.recv)
-				if st > 0 && rt > 0 {
-					//从第二次有结果开始显示
-					ps := (_st - st) / 4 //每秒写
-					pr := (_rt - rt) / 4 //每秒读
-					fmt.Printf("\r\b%d\t%d\t%d\t%d", self.send, self.recv, ps, pr)
-				}
-				atomic.StoreInt32(&st, _st)
-				atomic.StoreInt32(&rt, _rt)
-			}
+			time.Sleep(time.Duration(time.Second * 2))
+			//第一次不算
+			_ts := utils.Timestamp10() - ts
+			_st := atomic.LoadInt32(&self.send)
+			_rt := atomic.LoadInt32(&self.recv)
+			fmt.Printf("\r\b%d\t%d\t%d\t%d", _st, _rt, (int64(_st) / _ts), (int64(_rt) / _ts))
 		} else {
 			time.Sleep(time.Duration(time.Second * 2))
 		}
@@ -142,7 +137,13 @@ func (self *client) start() {
 			si.add(self.uid)
 			sc := core.NewTcpSessionConn(self.conn)
 			// 保持会话，开始心跳
-			stop := make(chan int)
+			_stop := make(chan int)
+			defer func() {
+				if r := recover(); r != nil {
+					close(_stop)
+					fmt.Println(r)
+				}
+			}()
 			go func(sc core.SessionConn, s chan int) {
 				//heartbeat
 			EndH:
@@ -155,7 +156,7 @@ func (self *client) start() {
 						sc.WritePacket(p)
 					}
 				}
-			}(sc, stop)
+			}(sc, _stop)
 			if len(content) > 0 {
 				go func(sc core.SessionConn, s chan int) {
 					//write thread
@@ -176,7 +177,7 @@ func (self *client) start() {
 							}
 						}
 					}
-				}(sc, stop)
+				}(sc, _stop)
 			}
 			go func(sc core.SessionConn, uid string, s chan int) {
 				//read thread
@@ -191,12 +192,18 @@ func (self *client) start() {
 						_part = part
 						for _, packet := range packetList {
 							if p, err := types.NewPacket(packet); err == nil {
-								si.counter("R", p.Envelope.From, p.Envelope.To)
+								id, fm, to, tp := p.EnvelopeIdFromToType()
+								if tp != types.MSG_TYPE_STATE {
+									ack := fmt.Sprintf(messageAck, to, id)
+									p := append([]byte(ack), byte(1))
+									sc.WritePacket(p)
+									si.counter("R", fm, to)
+								}
 							}
 						}
 					}
 				}
-			}(sc, self.uid, stop)
+			}(sc, self.uid, _stop)
 		}
 	}
 }
@@ -244,6 +251,11 @@ func genTcp() {
 
 // test conn
 func MakeConn(laddr, addr string, total, hb, mg, ms int) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(r)
+		}
+	}()
 	si = newSessionIndex()
 	fmt.Println(laddr, addr, total, hb)
 	localAddr = laddr
