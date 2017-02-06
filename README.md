@@ -13,4 +13,5 @@ cd /app/gopath/src
 git clone https://github.com/emsg/sara.git
 cd /app/gopath
 go install sara
+ln -s /usr/local/bin/sara /app/gopath/bin/sara
 ```
