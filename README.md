@@ -5,13 +5,49 @@
 # 协议文档
 https://github.com/emsg/docs/wiki
 
-## 编译安装
+## 安装与使用
 
-#### 假设 GOPATH 在 /app/gopath 目录
+#### 编译
+###### 假设 GOPATH 在 /opt/gopath 目录
 ```sh
-cd /app/gopath/src
+cd /opt/gopath/src
 git clone https://github.com/emsg/sara.git
 cd /app/gopath
 go install sara
-ln -s /usr/local/bin/sara /app/gopath/bin/sara
+# 应当确保 /usr/local/bin 在 PATH 中
+sudo ln -s /usr/local/bin/sara /app/gopath/bin/sara
+```
+#### 参数说明
+```sh
+sara -h
+
+NAME:
+   sara - SARA IM Server
+
+USAGE:
+   sara [global options] command [command options] [arguments...]
+
+VERSION:
+   0.0.1
+
+AUTHOR(S):
+   liangc <cc14514@icloud.com>
+
+COMMANDS:
+     version
+     stop     停止服务，尽量避免直接 kill 服务
+     setup    生成默认配置文件
+     help, h  Shows a list of commands or help for one command
+
+   benchmark:
+     makeconn  创建指定个数的连接，测试最大连接数
+
+   debug:
+     pprof  将 cpu/mem 信息写入文件
+
+GLOBAL OPTIONS:
+   --debug                   write 'pprof' info to /tmp/sara_cpu.out and /tmp/sara_mem.out
+   --config value, -c value  cmd-line first, config second  (default: "/etc/sara/conf.json")
+   --help, -h                show help
+   --version, -v             print the version
 ```
