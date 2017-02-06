@@ -163,11 +163,17 @@ func (self *Node) Wait() {
 	log4go.Info("⛑️  begin security shutdown.")
 	//shutdown
 	i := 0
+	t := len(self.sessionMap)
+
+	slist := []*core.Session{}
 	for _, s := range self.sessionMap {
-		s.CloseSession("node_stop")
+		slist = append(slist, s)
 		i++
 	}
-	log4go.Info("please wait session close. total=%d , clean=%d", len(self.sessionMap), i)
+	for _, s := range slist {
+		s.CloseSession("node_stop")
+	}
+	log4go.Info("please wait session close. total=%d , clean=%d", t, i)
 	self.wg.Wait()
 	log4go.Info("session close success")
 	self.db.Close()

@@ -63,13 +63,22 @@ func (self *sessionIndex) del(uid string) {
 }
 
 //发消息时，从这里随机一个 to
-func (self *sessionIndex) rand(uid string) string {
-	idx := self.r.Intn(int(len(self.uidArr) - 1))
-	to := self.uidArr[idx]
-	if uid == to {
-		return self.rand(uid)
+func (self *sessionIndex) rand(uid string) (to string) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(r)
+		}
+	}()
+	l := len(self.uidArr)
+	if l <= 0 {
+		return
 	}
-	return to
+	idx := self.r.Intn(int(len(self.uidArr) - 1))
+	to = self.uidArr[idx]
+	if uid == to {
+		to = ""
+	}
+	return
 }
 func (self *sessionIndex) counter(action, from, to string) {
 	switch action {
@@ -84,15 +93,16 @@ func (self *sessionIndex) showStatus() {
 	sendMessage = true
 	ts := utils.Timestamp10()
 	fmt.Println("----------------------------", ts)
-	fmt.Println("SEND\tRECV\tSEND/s\tRECV/s\t")
+	fmt.Println("SEND\tRECV\tSEND/s\tRECV/s\tNOW")
 	for {
 		if self.recv > 0 && self.send > 0 {
 			time.Sleep(time.Duration(time.Second * 2))
 			//第一次不算
-			_ts := utils.Timestamp10() - ts
+			now := utils.Timestamp10()
+			_ts := now - ts
 			_st := atomic.LoadInt32(&self.send)
 			_rt := atomic.LoadInt32(&self.recv)
-			fmt.Printf("\r\b%d\t%d\t%d\t%d", _st, _rt, (int64(_st) / _ts), (int64(_rt) / _ts))
+			fmt.Printf("\r\b%d\t%d\t%d\t%d\t%d", _st, _rt, (int64(_st) / _ts), (int64(_rt) / _ts), now)
 		} else {
 			time.Sleep(time.Duration(time.Second * 2))
 		}
@@ -138,12 +148,6 @@ func (self *client) start() {
 			sc := core.NewTcpSessionConn(self.conn)
 			// 保持会话，开始心跳
 			_stop := make(chan int)
-			defer func() {
-				if r := recover(); r != nil {
-					close(_stop)
-					fmt.Println(r)
-				}
-			}()
 			go func(sc core.SessionConn, s chan int) {
 				//heartbeat
 			EndH:
@@ -169,11 +173,12 @@ func (self *client) start() {
 							if len(content) > 0 && sendMessage {
 								id := uuid.Rand().Hex()
 								from := self.uid
-								to := si.rand(self.uid)
-								message := fmt.Sprintf(messageTemplate, from, to, id, content)
-								p := append([]byte(message), byte(1))
-								sc.WritePacket(p)
-								si.counter("W", from, to)
+								if to := si.rand(self.uid); to != "" {
+									message := fmt.Sprintf(messageTemplate, from, to, id, content)
+									p := append([]byte(message), byte(1))
+									sc.WritePacket(p)
+									si.counter("W", from, to)
+								}
 							}
 						}
 					}
@@ -181,16 +186,15 @@ func (self *client) start() {
 			}
 			go func(sc core.SessionConn, uid string, s chan int) {
 				//read thread
-				var _part []byte
 			EndR:
 				for {
-					if packetList, part, err := sc.ReadPacket(_part); err != nil {
+					r := <-sc.ReadPacket()
+					if r.Err() != nil {
 						si.del(uid)
-						s <- 1
+						close(s)
 						break EndR
 					} else {
-						_part = part
-						for _, packet := range packetList {
+						for _, packet := range r.Packets() {
 							if p, err := types.NewPacket(packet); err == nil {
 								id, fm, to, tp := p.EnvelopeIdFromToType()
 								if tp != types.MSG_TYPE_STATE {

@@ -8,34 +8,45 @@ import (
 )
 
 type TcpSessionConn struct {
-	conn net.Conn
+	conn     net.Conn
+	part     []byte
+	resultCh chan *ReadPacketResult
 }
 
 func (self *TcpSessionConn) SetReadTimeout(timeout time.Time) {
 	self.conn.SetReadDeadline(timeout)
+	self.conn.SetWriteDeadline(timeout)
 }
 
-func (self *TcpSessionConn) ReadPacket(part []byte) (packetList [][]byte, newPart []byte, e error) {
-	buff := make([]byte, 256)
-	if _, err := self.conn.Read(buff); err != nil {
-		switch err.(type) {
-		case *net.OpError:
-			ne := err.(*net.OpError)
-			if ne.Timeout() {
-				// socket timeout
-				e = errors.New("TIMEOUT")
-			} else {
-				// server socket close or others
-				e = errors.New(ne.Error())
-			}
-		default:
-			// EOF, normal
-			e = err
+func (self *TcpSessionConn) recv() {
+	defer func() {
+		if r := recover(); r != nil {
+			log4go.Error(r)
 		}
-	} else {
-		packetList, newPart, _ = DecodePacket(buff, part)
+	}()
+	for {
+		log4go.Debug("👀  1 tcp_read_packet")
+		buff := make([]byte, 256)
+		_, e := self.conn.Read(buff)
+		log4go.Debug("👀  2 tcp_read_packet_buff => %s", buff)
+		packetList, newPart, _ := DecodePacket(buff, self.part)
+		self.part = newPart
+		log4go.Debug("👀  3 tcp_read_packet_decode => %s", packetList)
+		r := &ReadPacketResult{
+			packets: packetList,
+			err:     e,
+		}
+		log4go.Debug("👀  4 tcp_read_packet_return => %s", r)
+		self.resultCh <- r
+		if e != nil {
+			log4go.Debug("recv_error")
+			return
+		}
 	}
-	return
+}
+
+func (self *TcpSessionConn) ReadPacket() <-chan *ReadPacketResult {
+	return self.resultCh
 }
 
 func (self *TcpSessionConn) WritePacket(packet []byte) (i int, e error) {
@@ -51,10 +62,15 @@ func (self *TcpSessionConn) WritePacket(packet []byte) (i int, e error) {
 
 func (self *TcpSessionConn) Close() {
 	self.conn.Close()
+	close(self.resultCh)
 }
 
 func NewTcpSessionConn(conn net.Conn) *TcpSessionConn {
-	sc := &TcpSessionConn{}
+	sc := &TcpSessionConn{
+		part:     make([]byte, 0),
+		resultCh: make(chan *ReadPacketResult),
+	}
 	sc.conn = conn
+	go sc.recv()
 	return sc
 }

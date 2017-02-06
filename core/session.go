@@ -20,10 +20,22 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type ReadPacketResult struct {
+	packets [][]byte
+	err     error
+}
+
+func (self *ReadPacketResult) Packets() [][]byte {
+	return self.packets
+}
+func (self *ReadPacketResult) Err() error {
+	return self.err
+}
+
 type SessionConn interface {
 	SetReadTimeout(timeout time.Time)
 	// return packets,part,error
-	ReadPacket(part []byte) ([][]byte, []byte, error)
+	ReadPacket() <-chan *ReadPacketResult
 	WritePacket(packet []byte) (int, error)
 	Close()
 }
@@ -37,7 +49,7 @@ type MessageRouter interface {
 
 const (
 	LOGIN_TIMEOUT   int    = 5
-	SESSION_TIMEOUT        = 90
+	SESSION_TIMEOUT        = 60
 	OFFLINE_EXPIRED        = 3600 * 24 * 7 //default 7days
 	SERVER_ACK      string = "server_ack"
 )
@@ -61,12 +73,11 @@ func (self *SessionStatus) ToJson() []byte {
 }
 
 type Session struct {
+	sync.RWMutex
 	wg      *sync.WaitGroup
 	Status  *SessionStatus
 	sc      SessionConn
 	packets chan []byte
-	part    []byte
-	stop    chan struct{}
 	clean   chan<- string
 	ssdb    saradb.Database
 	node    MessageRouter
@@ -147,12 +158,11 @@ func (self *Session) heartbeat() {
 	if self.Status.Status == types.STATUS_LOGIN {
 		hb := []byte{types.HEART_BEAT}
 		self.SendMessage(hb)
-		//self.storeSessionStatus()
-		j, _ := types.NewJID(self.Status.Jid)
-		key := j.ToSessionid()
-		if _, err := self.ssdb.ResetExpire(key, SESSION_TIMEOUT); err != nil {
-			self.CloseSession("heart_beat_on_lost_session")
-		}
+		//j, _ := types.NewJID(self.Status.Jid)
+		//key := j.ToSessionid()
+		//if _, err := self.ssdb.ResetExpire(key, SESSION_TIMEOUT); err != nil {
+		//	self.CloseSession("heart_beat_on_lost_session")
+		//}
 		log4go.Debug("❤️  %s ->%d", self.Status.Jid, hb)
 	}
 }
@@ -213,7 +223,7 @@ func (self *Session) SendMessage(data []byte) (int, error) {
 }
 
 func (self *Session) CloseSession(tracemsg string) {
-	log4go.Info("session_close at %s ; sid=%s ; jid=%s", tracemsg, self.Status.Sid, self.Status.Jid)
+	log4go.Info("session_close at %s ; status=%s ; sid=%s ; jid=%s", tracemsg, self.Status.Status, self.Status.Sid, self.Status.Jid)
 	self.clean <- self.Status.Sid
 	if self.Status.Status == types.STATUS_LOGIN {
 		j, _ := types.NewJID(self.Status.Jid)
@@ -229,17 +239,19 @@ func (self *Session) CloseSession(tracemsg string) {
 func (self *Session) receive() {
 	self.wg.Add(1)
 	defer func() {
+		log4go.Info("session_done")
+		self.wg.Done()
 		if err := recover(); err != nil {
 			log4go.Error("err ==> %v", err)
 		}
-		self.wg.Done()
 	}()
-	log4go.Debug("receive_started")
+	self.setSessionTimeout()
+	log4go.Info("recevice_started")
 	for {
+		log4go.Debug("loop")
 		select {
-		case <-self.stop:
-			log4go.Debug("session_stop")
 		case p := <-self.packets:
+			log4go.Debug("🚩 🚩  packets_handler => %s", p)
 			if self.Status.Status == types.STATUS_CONN {
 				//登陆
 				self.openSession(p)
@@ -274,29 +286,22 @@ func (self *Session) receive() {
 				self.answer(types.NewPacketSysNotify(uuid.Rand().Hex(), err.Error()))
 				self.CloseSession("receive_message")
 			}
-		default:
-			self.setSessionTimeout()
-			if packetList, part, err := self.sc.ReadPacket(self.part); err != nil {
-				switch err.Error() {
-				case "EOF":
-					if self.Status.Status != types.STATUS_CLOSE {
-						self.CloseSession("receive_eof_normal")
-					}
-				case "TIMEOUT":
-					self.answer(types.NewPacketSysNotify(uuid.Rand().Hex(), types.FAIL_TIMEOUT))
-					self.CloseSession("receive_timeout")
-				default:
-					if self.Status.Status != types.STATUS_CLOSE {
-						self.CloseSession(fmt.Sprintf("receive_like_error: %s", err.Error()))
-					}
+		case result := <-self.sc.ReadPacket():
+			log4go.Debug("🚩  1 session_recv_packet => %s", result)
+			if result.Err() != nil {
+				log4go.Debug("🚩  session_recv_packet_err")
+				if self.Status.Status != types.STATUS_CLOSE {
+					self.CloseSession(fmt.Sprintf("conn_error : %s", result.Err()))
 				}
 				return
 			} else {
-				self.part = part
-				for _, packet := range packetList {
+				log4go.Debug("🚩 2 session_recv_packet_normal")
+				for _, packet := range result.Packets() {
+					log4go.Debug("🚩 3 session_recv_packet=> %s", packet)
 					self.packets <- packet
 				}
 			}
+			self.setSessionTimeout()
 		}
 	}
 }
@@ -317,7 +322,9 @@ func (self *Session) storeSessionStatus() {
 	val := self.Status.ToJson()
 	//log4go.Debug("storeSessionStatus-> %s", val)
 	idx := []byte(self.Status.Nodeid)
-	self.ssdb.PutExWithIdx(idx, key, val, SESSION_TIMEOUT)
+	// XXX : session 不应该在数据库中超时，heartbeat 只是为了刷新 tcp conn
+	//self.ssdb.PutExWithIdx(idx, key, val, SESSION_TIMEOUT)
+	self.ssdb.PutExWithIdx(idx, key, val, -1)
 }
 
 //所有消息都先存储起来
@@ -331,6 +338,7 @@ func (self *Session) fetchOfflinePacket() (pks []*types.BasePacket, ids []string
 	var ddata [][]byte
 	if ddata, err = self.ssdb.GetByIdx(idx); err == nil {
 		for _, data := range ddata {
+			log4go.Debug("%s", data)
 			if pk, pk_err := types.NewBasePacket(data); pk_err == nil {
 				ids = append(ids, pk.Envelope.Id)
 				pks = append(pks, pk)
@@ -383,7 +391,7 @@ func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRout
 		ssdb:    ssdb,
 		node:    node,
 		sc:      sc,
-		packets: make(chan []byte, 16),
+		packets: make(chan []byte, 32),
 	}
 	go session.receive()
 	return session

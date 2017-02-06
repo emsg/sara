@@ -133,7 +133,8 @@ func (self *SaraDatabase) getRedisClient(k string) (r *redis.Client) {
 }
 
 func (self *SaraDatabase) ResetExpire(key []byte, ex int) (t int, err error) {
-	if r := self.execute4s_sync("Expire", key, ex); r.Err != nil {
+	//if r := self.execute4s_sync("Expire", key, ex); r.Err != nil {
+	if r := self.executeDirect("Expire", key, ex); r.Err != nil {
 		t, err = 0, r.Err
 	} else {
 		if i, e := r.Int(); e != nil {
@@ -148,7 +149,9 @@ func (self *SaraDatabase) ResetExpire(key []byte, ex int) (t int, err error) {
 }
 func (self *SaraDatabase) Put(key []byte, value []byte) error {
 	if self.is4s(key) {
-		self.execute4s("SET", key, value)
+		if r := self.execute4s_sync("SET", key, value); r != nil && r.Err != nil {
+			return r.Err
+		}
 	} else {
 		self.execute("SET", key, value)
 	}
@@ -156,7 +159,9 @@ func (self *SaraDatabase) Put(key []byte, value []byte) error {
 }
 func (self *SaraDatabase) PutEx(key []byte, value []byte, ex int) error {
 	if self.is4s(key) {
-		self.execute4s("SETEX", key, ex, value)
+		if r := self.execute4s_sync("SETEX", key, ex, value); r != nil && r.Err != nil {
+			return r.Err
+		}
 	} else {
 		self.execute("SETEX", key, ex, value)
 	}
@@ -182,11 +187,17 @@ func (self *SaraDatabase) Delete(key []byte) error {
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	idx = append(idx, IDX_SUFFIX...)
 	if self.is4s(key) {
-		self.execute4s("HSET", idx, key, value)
+		r := self.execute4s_sync("HSET", idx, key, value)
+		if r != nil && r.Err != nil {
+			return r.Err
+		}
 		if ex > 0 {
-			self.execute4s("SETEX", key, ex, value)
+			r = self.execute4s_sync("SETEX", key, ex, value)
 		} else {
-			self.execute4s("SET", key, value)
+			r = self.execute4s_sync("SET", key, value)
+		}
+		if r != nil && r.Err != nil {
+			return r.Err
 		}
 	} else {
 		defer func() {
@@ -234,7 +245,8 @@ func (self *SaraDatabase) CountByIdx(idx []byte) (int, error) {
 
 func (self *SaraDatabase) GetByIdx(idx []byte) ([][]byte, error) {
 	idx = append(idx, IDX_SUFFIX...)
-	if vals, err := self.executeDirect("HKEYS", idx).ListBytes(); err != nil {
+	log4go.Debug("idx=> %s", idx)
+	if vals, err := self.executeDirect("HVALS", idx).ListBytes(); err != nil {
 		return nil, err
 	} else {
 		return vals, nil
@@ -340,6 +352,7 @@ func (self *SaraDatabase) execute(cmd string, args ...interface{}) *redis.Resp {
 	return nil
 }
 
+//牺牲性能，来保证 session 中关键操作的稳定性
 func (self *SaraDatabase) execute4s_sync(cmd string, args ...interface{}) *redis.Resp {
 	respCh := make(chan *redis.Resp)
 	log4go.Debug("sync write : %s %s", cmd, args)
@@ -387,8 +400,8 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, 10000),
-		wbCh4s:   make(chan writeBufArgs, 10000),
+		wbCh:     make(chan writeBufArgs, poolSize),
+		wbCh4s:   make(chan writeBufArgs, poolSize),
 		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initDb(); err != nil {
@@ -402,8 +415,8 @@ func NewClusterDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, 10000),
-		wbCh4s:   make(chan writeBufArgs, 10000),
+		wbCh:     make(chan writeBufArgs, poolSize),
+		wbCh4s:   make(chan writeBufArgs, poolSize),
 		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initClusterDb(); err != nil {

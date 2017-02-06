@@ -10,22 +10,35 @@ import (
 )
 
 type WsSessionConn struct {
-	conn *websocket.Conn
+	conn     *websocket.Conn
+	part     []byte
+	resultCh chan *ReadPacketResult
 }
 
 func (self *WsSessionConn) SetReadTimeout(timeout time.Time) {
 	self.conn.UnderlyingConn().SetReadDeadline(timeout)
+	self.conn.UnderlyingConn().SetWriteDeadline(timeout)
 }
 
-func (self *WsSessionConn) ReadPacket(part []byte) ([][]byte, []byte, error) {
-	if _, p, err := self.conn.ReadMessage(); err != nil {
-		// 其实 eof/timeout/others 都无所谓，session 单独处理 eof
-		// 只是想给一个通知,简单起见，这个可以没有
-		log4go.Debug("🌍  --> err = %s , %v", err.Error(), err)
-		return nil, nil, err
-	} else {
-		return [][]byte{p}, part, nil
+func (self *WsSessionConn) recv() {
+	defer func() {
+		if r := recover(); r != nil {
+			log4go.Error(r)
+		}
+	}()
+	for {
+		_, p, err := self.conn.ReadMessage()
+		self.resultCh <- &ReadPacketResult{
+			packets: [][]byte{p},
+			err:     err,
+		}
+		if err != nil {
+			return
+		}
 	}
+}
+func (self *WsSessionConn) ReadPacket() <-chan *ReadPacketResult {
+	return self.resultCh
 }
 
 func (self *WsSessionConn) WritePacket(packet []byte) (int, error) {
@@ -46,5 +59,11 @@ func (self *WsSessionConn) Close() {
 }
 
 func NewWsSessionConn(conn *websocket.Conn) *WsSessionConn {
-	return &WsSessionConn{conn: conn}
+	sc := &WsSessionConn{
+		conn:     conn,
+		part:     make([]byte, 0),
+		resultCh: make(chan *ReadPacketResult),
+	}
+	go sc.recv()
+	return sc
 }
