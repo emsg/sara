@@ -17,10 +17,8 @@ go install sara
 # 应当确保 /usr/local/bin 在 PATH 中
 sudo ln -s /usr/local/bin/sara /app/gopath/bin/sara
 ```
-#### 参数说明
+###### sara -h
 ```sh
-sara -h
-
 NAME:
    sara - SARA IM Server
 
@@ -50,4 +48,17 @@ GLOBAL OPTIONS:
    --config value, -c value  cmd-line first, config second  (default: "/etc/sara/conf.json")
    --help, -h                show help
    --version, -v             print the version
+```
+
+###### sara setup -h
+```
+bogon:sara liangc$ sara setup -h
+NAME:
+   sara setup - 生成默认配置文件
+
+USAGE:
+   sara setup [command options] [arguments...]
+
+OPTIONS:
+   --out value, -o value  配置文件全路径 (default: "/etc/sara/conf.json")
 ```
