@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"sara/config"
 	"sara/core"
 	"sara/core/types"
@@ -13,6 +14,7 @@ import (
 	"sara/sararpc"
 	"sara/utils"
 	"sync"
+	"time"
 
 	"github.com/alecthomas/log4go"
 	"github.com/gorilla/websocket"
@@ -364,5 +366,13 @@ func New(ctx *cli.Context) *Node {
 	node.Nodeid = config.GetString("nodeid", "")
 	node.cleanGhostSession()
 	go node.clean()
+	if ctx.GlobalBool("debug") {
+		go func() {
+			for {
+				log4go.Info("[debug_status] num_goroutine : %d , session_map_len : %d", runtime.NumGoroutine(), len(node.sessionMap))
+				time.Sleep(time.Duration(time.Second * 10))
+			}
+		}()
+	}
 	return node
 }

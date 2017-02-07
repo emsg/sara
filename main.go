@@ -18,7 +18,6 @@ import (
 	"sara/utils"
 	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/alecthomas/log4go"
 	"github.com/urfave/cli"
@@ -130,14 +129,6 @@ func sara(ctx *cli.Context) error {
 	}
 	if config.GetBool("enable_wss", true) {
 		currentnode.StartWSS()
-	}
-	if ctx.GlobalBool("debug") {
-		go func() {
-			for {
-				log4go.Info("[debug] num_goroutine : %d", runtime.NumGoroutine())
-				time.Sleep(time.Duration(time.Second * 5))
-			}
-		}()
 	}
 	savePid()
 	currentnode.Wait()
