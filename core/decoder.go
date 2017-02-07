@@ -13,13 +13,15 @@ func DecodePacket(data []byte, part []byte) ([][]byte, []byte, error) {
 		new_part []byte
 		packets  [][]byte
 	)
-	//log4go.Debug("1🐍 >>>> %b", data)
+	log4go.Debug("1🐍 >>>> %b", data)
 	//去掉 buff 结尾的占位符
-	if last := bytes.IndexByte(data, 0x0); last > 0 {
+	if last := bytes.IndexByte(data, 0x0); last > -1 {
 		data = data[:last]
 	}
-	//log4go.Debug("2🐍 >>>> %b", data)
-
+	log4go.Debug("2🐍 >>>> %b", data)
+	if len(data) == 0 {
+		return packets, part, nil
+	}
 	dataList := bytes.Split(data, []byte{types.END_FLAG})
 	//log4go.Debug("split.len -> %d", len(dataList))
 	lastByte := data[len(data)-1]

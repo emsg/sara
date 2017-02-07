@@ -32,10 +32,12 @@ func (self *ReadPacketResult) Err() error {
 	return self.err
 }
 
+type PacketHandler func(*ReadPacketResult)
+
 type SessionConn interface {
 	SetReadTimeout(timeout time.Time)
 	// return packets,part,error
-	ReadPacket() <-chan *ReadPacketResult
+	ReadPacket(handler PacketHandler)
 	WritePacket(packet []byte) (int, error)
 	Close()
 }
@@ -237,6 +239,54 @@ func (self *Session) CloseSession(tracemsg string) {
 
 // 这个方法只能处理 c2s 的请求，并不能处理 s2s
 //TODO 将 packet channel 变成普通数组传递进来，可取消一条线程,用 sc 来回调此函数
+func (self *Session) packetHandler(result *ReadPacketResult) {
+	defer self.setSessionTimeout()
+	if result.Err() != nil {
+		if self.Status.Status != types.STATUS_CLOSE {
+			self.CloseSession(fmt.Sprintf("packet_handler :: %s", result.Err()))
+		}
+		return
+	}
+	for _, p := range result.Packets() {
+		log4go.Debug("🚩 🚩  packets_handler => %s", p)
+		if self.Status.Status == types.STATUS_CONN {
+			//登陆
+			self.openSession(p)
+		} else if len(p) == 1 && p[0] == types.HEART_BEAT {
+			//心跳
+			self.heartbeat()
+		} else if packet, err := types.NewPacket(p); err == nil {
+			//消息协议解析,再分别处理 server_ack 和
+			packet.Envelope.Ct = fmt.Sprintf("%d", utils.Timestamp13())
+			id, from, to, msgtype := packet.EnvelopeIdFromToType()
+			log4go.Debug("recv: %s->%s", from, p)
+			if msgtype == types.MSG_TYPE_STATE && SERVER_ACK == to {
+				//server_ack 消息，删除离线
+				self.serverAck(packet)
+			} else if msgtype == types.MSG_TYPE_CHAT {
+				// 单聊
+				self.answer(types.NewPacketAck(id))
+				self.RoutePacket(packet)
+			} else if msgtype == types.MSG_TYPE_GROUP_CHAT {
+				// 群聊
+				if packets, gerr := GenerateGroupPackets(self.ssdb, packet); gerr == nil {
+					self.answer(types.NewPacketAck(id))
+					self.RoutePacketList(packets)
+				} else {
+					self.answer(types.NewPacketSysNotify(id, gerr.Error()))
+				}
+			} else {
+				//TODO 错误的操作
+			}
+		} else {
+			log4go.Debug("👀  s=>>  %s", p)
+			self.answer(types.NewPacketSysNotify(uuid.Rand().Hex(), err.Error()))
+			self.CloseSession("receive_message")
+		}
+	}
+}
+
+/*
 func (self *Session) receive() {
 	self.wg.Add(1)
 	defer func() {
@@ -246,8 +296,8 @@ func (self *Session) receive() {
 			log4go.Error("err ==> %v", err)
 		}
 	}()
-	self.setSessionTimeout()
 	log4go.Info("recevice_started")
+	self.setSessionTimeout()
 	for {
 		log4go.Debug("loop")
 		select {
@@ -302,10 +352,11 @@ func (self *Session) receive() {
 					self.packets <- packet
 				}
 			}
-			self.setSessionTimeout()
 		}
+		self.setSessionTimeout()
 	}
 }
+*/
 
 func (self *Session) setSessionTimeout() {
 	var t time.Time
@@ -367,29 +418,37 @@ func (self *Session) serverAck(packet *types.Packet) {
 
 //通过 tcp 创建 session
 func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
+	session := newSession(c, ssdb, node, cleanSession, wg)
 	sc := NewTcpSessionConn(conn)
-	return newSession(c, sc, ssdb, node, cleanSession, wg)
+	sc.ReadPacket(session.packetHandler)
+	session.sc = sc
+	session.setSessionTimeout()
+	return session
 }
 
 //通过 websocket 创建 session
 func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
+	session := newSession(c, ssdb, node, cleanSession, wg)
 	sc := NewWsSessionConn(conn)
-	return newSession(c, sc, ssdb, node, cleanSession, wg)
+	sc.ReadPacket(session.packetHandler)
+	session.sc = sc
+	session.setSessionTimeout()
+	return session
 }
 
-func newSession(c string, sc SessionConn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
+func newSession(c string, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sid := uuid.Rand().Hex()
 	nodeid := config.GetString("nodeid", "")
 	session := &Session{
-		wg:      wg,
-		Status:  &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
-		clean:   cleanSession,
-		ssdb:    ssdb,
-		node:    node,
-		sc:      sc,
+		wg:     wg,
+		Status: &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
+		clean:  cleanSession,
+		ssdb:   ssdb,
+		node:   node,
+		//sc:      sc,
 		packets: make(chan []byte, 32),
 	}
-	go session.receive()
+	//go session.receive()
 	return session
 }
 

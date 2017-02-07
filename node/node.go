@@ -316,7 +316,7 @@ func (self *Node) cleanGhostSession() {
 	nodeid := []byte(self.Nodeid)
 	ts := fmt.Sprintf("%d", utils.Timestamp13())
 	//所有的节点，启动后，都注册在 sara 这个 hashtable 中,记录节点的启动时间
-	self.db.PutExWithIdx([]byte("sara"), nodeid, []byte(ts), 0)
+	self.db.PutExWithIdx([]byte("sara"), nodeid, append(nodeid, []byte(ts)...), 0)
 	log4go.Info("register node : %s", nodeid)
 	self.db.DeleteByIdx(nodeid)
 	log4go.Info("🔪  👻  clean ghost session")

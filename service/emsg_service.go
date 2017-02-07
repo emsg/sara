@@ -46,6 +46,7 @@ func (self *EmsgSessionService) Counter(params interface{}, token rpcserver.TOKE
 	entity := make(map[string]interface{})
 	counters := make([]map[string]interface{}, 0)
 	for _, nodeid := range nodeids {
+		nodeid = nodeid[:len(nodeid)-13]
 		if count, err := db.CountByIdx(nodeid); err == nil {
 			c := make(map[string]interface{})
 			c["node"] = string(nodeid)

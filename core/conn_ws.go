@@ -10,14 +10,15 @@ import (
 )
 
 type WsSessionConn struct {
-	conn     *websocket.Conn
-	part     []byte
-	resultCh chan *ReadPacketResult
+	handler PacketHandler
+	conn    *websocket.Conn
+	part    []byte
+	//resultCh chan *ReadPacketResult
 }
 
 func (self *WsSessionConn) SetReadTimeout(timeout time.Time) {
 	self.conn.UnderlyingConn().SetReadDeadline(timeout)
-	self.conn.UnderlyingConn().SetWriteDeadline(timeout)
+	//self.conn.UnderlyingConn().SetWriteDeadline(timeout)
 }
 
 func (self *WsSessionConn) recv() {
@@ -28,17 +29,23 @@ func (self *WsSessionConn) recv() {
 	}()
 	for {
 		_, p, err := self.conn.ReadMessage()
-		self.resultCh <- &ReadPacketResult{
-			packets: [][]byte{p},
-			err:     err,
-		}
+		r := &ReadPacketResult{}
 		if err != nil {
+			log4go.Debug("ws_recv_error => %s", err)
+			r.err = err
+			self.handler(r)
 			return
+		}
+		if len(p) > 0 {
+			r.packets = [][]byte{p}
+			self.handler(r)
 		}
 	}
 }
-func (self *WsSessionConn) ReadPacket() <-chan *ReadPacketResult {
-	return self.resultCh
+func (self *WsSessionConn) ReadPacket(handler PacketHandler) {
+	//return self.resultCh
+	self.handler = handler
+	go self.recv()
 }
 
 func (self *WsSessionConn) WritePacket(packet []byte) (int, error) {
@@ -60,10 +67,10 @@ func (self *WsSessionConn) Close() {
 
 func NewWsSessionConn(conn *websocket.Conn) *WsSessionConn {
 	sc := &WsSessionConn{
-		conn:     conn,
-		part:     make([]byte, 0),
-		resultCh: make(chan *ReadPacketResult),
+		conn: conn,
+		part: make([]byte, 0),
+		//resultCh: make(chan *ReadPacketResult),
 	}
-	go sc.recv()
+	//go sc.recv()
 	return sc
 }

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alecthomas/log4go"
 	"github.com/golibs/uuid"
 	"github.com/tidwall/gjson"
 )
@@ -164,6 +165,7 @@ func (self *client) start() {
 			if len(content) > 0 {
 				go func(sc core.SessionConn, s chan int) {
 					//write thread
+					//fmt.Printf("👿  write thread started. content_len=%d", len(content))
 				EndW:
 					for {
 						select {
@@ -184,30 +186,24 @@ func (self *client) start() {
 					}
 				}(sc, _stop)
 			}
-			go func(sc core.SessionConn, uid string, s chan int) {
-				//read thread
-			EndR:
-				for {
-					r := <-sc.ReadPacket()
-					if r.Err() != nil {
-						si.del(uid)
-						close(s)
-						break EndR
-					} else {
-						for _, packet := range r.Packets() {
-							if p, err := types.NewPacket(packet); err == nil {
-								id, fm, to, tp := p.EnvelopeIdFromToType()
-								if tp != types.MSG_TYPE_STATE {
-									ack := fmt.Sprintf(messageAck, to, id)
-									p := append([]byte(ack), byte(1))
-									sc.WritePacket(p)
-									si.counter("R", fm, to)
-								}
+			sc.ReadPacket(func(r *core.ReadPacketResult) {
+				if r.Err() != nil {
+					si.del(self.uid)
+					close(_stop)
+				} else {
+					for _, packet := range r.Packets() {
+						if p, err := types.NewPacket(packet); err == nil {
+							id, fm, to, tp := p.EnvelopeIdFromToType()
+							if tp != types.MSG_TYPE_STATE {
+								ack := fmt.Sprintf(messageAck, to, id)
+								p := append([]byte(ack), byte(1))
+								sc.WritePacket(p)
+								si.counter("R", fm, to)
 							}
 						}
 					}
 				}
-			}(sc, self.uid, _stop)
+			})
 		}
 	}
 }
@@ -255,6 +251,8 @@ func genTcp() {
 
 // test conn
 func MakeConn(laddr, addr string, total, hb, mg, ms int) {
+	log4go.AddFilter("file", log4go.Level(log4go.ERROR), log4go.NewFileLogWriter("/tmp/sara_benchmark.log", false))
+	log4go.AddFilter("stdout", log4go.Level(log4go.ERROR), log4go.NewConsoleLogWriter())
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println(r)
