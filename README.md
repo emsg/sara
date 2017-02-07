@@ -73,13 +73,13 @@ OPTIONS:
 <tr><td>nodeid</td><td>n01</td><td>节点唯一标示，做集群时必须确保此属性唯一</td></tr>
 <tr><td>dbaddr</td><td>localhost:6379</td><td>redis地址，不启用 auth，支持单节点和 cluster </td></tr>
 <tr><td>dbpool</td><td>100</td><td>redis连接池大小</td></tr>
-<tr><td>callback</td><td>""</td><td>https://github.com/emsg/docs/wiki/RPC 回调接口</td><td> 
-<tr><td>nodeaddr</td><td> "localhost:4281"</td><td>节点间通信地址，做集群部署时使用</td></tr>
-<tr><td>logfile</td><td>"/tmp/sara.log"</td><td>日志文件</td></tr>
+<tr><td>callback</td><td></td><td>https://github.com/emsg/docs/wiki/RPC 回调接口</td><td> 
+<tr><td>nodeaddr</td><td>localhost:4281</td><td>节点间通信地址，做集群部署时使用</td></tr>
+<tr><td>logfile</td><td>/tmp/sara.log</td><td>日志文件</td></tr>
 <tr><td>loglevel</td><td>3</td><td>0:ERROR,1:WRAN,2:INFO,3:DEBUG</td></tr>
-<tr><td>dc</td><td>"dc01"</td><td>TODO:数据中心编号，跨数据中心部署</td></tr>
-<tr><td>keyfile</td><td>"/etc/sara/server.key"</td><td>私钥: openssl genrsa -out server.key 2048</td></tr>
-<tr><td>certfile</td><td>"/etc/sara/server.pem"</td><td>证书: openssl req -new -x509 -key server.key -out server.pem -days 3650</td></tr>
+<tr><td>dc</td><td>dc01</td><td>TODO:数据中心编号，跨数据中心部署</td></tr>
+<tr><td>keyfile</td><td>/etc/sara/server.key</td><td>私钥: openssl genrsa -out server.key 2048</td></tr>
+<tr><td>certfile</td><td>/etc/sara/server.pem</td><td>证书: openssl req -new -x509 -key server.key -out server.pem -days 3650</td></tr>
 <tr><td>enable_tcp</td><td>true</td><td>true:提供tcp服务,false:不提供tcp服务</td></tr>
 <tr><td>enable_tls</td><td>false</td><td>true:需要提供 keyfile 和 certfile，false:关闭 tls 服务</td></tr>
 <tr><td>enable_ws</td><td>true</td><td>true:提供websocket服务，false:不提供ws服务</td></tr>
