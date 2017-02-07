@@ -8,7 +8,7 @@ https://github.com/emsg/docs/wiki
 ## 安装与使用
 
 #### 编译
-###### 假设 GOPATH 在 /opt/gopath 目录
+###### 假设 GOPATH 在 /opt/gopath 目录, golang 1.7+
 ```sh
 cd /opt/gopath/src
 git clone https://github.com/emsg/sara.git
