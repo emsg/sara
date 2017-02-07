@@ -50,10 +50,11 @@ type MessageRouter interface {
 }
 
 const (
-	LOGIN_TIMEOUT   int    = 5
-	SESSION_TIMEOUT        = 60
-	OFFLINE_EXPIRED        = 3600 * 24 * 7 //default 7days
-	SERVER_ACK      string = "server_ack"
+	LOGIN_TIMEOUT          int    = 5
+	SESSION_TIMEOUT               = 60            //等待接收时的超时时间
+	PACKET_HANDLER_TIMEOUT        = 120           //收到消息后，最多可以延迟这么久,否则就是服务器过载
+	OFFLINE_EXPIRED               = 3600 * 24 * 7 //default 7days
+	SERVER_ACK             string = "server_ack"
 )
 
 type SessionStatus struct {
@@ -240,7 +241,8 @@ func (self *Session) CloseSession(tracemsg string) {
 // 这个方法只能处理 c2s 的请求，并不能处理 s2s
 //TODO 将 packet channel 变成普通数组传递进来，可取消一条线程,用 sc 来回调此函数
 func (self *Session) packetHandler(result *ReadPacketResult) {
-	defer self.setSessionTimeout()
+	self.setSessionTimeout(PACKET_HANDLER_TIMEOUT)
+	defer self.setSessionTimeout(0)
 	if result.Err() != nil {
 		if self.Status.Status != types.STATUS_CLOSE {
 			self.CloseSession(fmt.Sprintf("packet_handler :: %s", result.Err()))
@@ -358,9 +360,11 @@ func (self *Session) receive() {
 }
 */
 
-func (self *Session) setSessionTimeout() {
+func (self *Session) setSessionTimeout(sec int) {
 	var t time.Time
-	if self.Status.Status == types.STATUS_CONN {
+	if sec > 0 {
+		t = utils.TimeoutTime(sec)
+	} else if self.Status.Status == types.STATUS_CONN {
 		t = utils.TimeoutTime(LOGIN_TIMEOUT)
 	} else {
 		t = utils.TimeoutTime(SESSION_TIMEOUT)
@@ -422,7 +426,7 @@ func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRo
 	sc := NewTcpSessionConn(conn)
 	sc.ReadPacket(session.packetHandler)
 	session.sc = sc
-	session.setSessionTimeout()
+	session.setSessionTimeout(0)
 	return session
 }
 
@@ -432,7 +436,7 @@ func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node Mes
 	sc := NewWsSessionConn(conn)
 	sc.ReadPacket(session.packetHandler)
 	session.sc = sc
-	session.setSessionTimeout()
+	session.setSessionTimeout(0)
 	return session
 }
 

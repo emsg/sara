@@ -400,8 +400,8 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, poolSize),
-		wbCh4s:   make(chan writeBufArgs, poolSize),
+		wbCh:     make(chan writeBufArgs, poolSize*2),
+		wbCh4s:   make(chan writeBufArgs, poolSize*2),
 		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initDb(); err != nil {
@@ -415,8 +415,8 @@ func NewClusterDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, poolSize),
-		wbCh4s:   make(chan writeBufArgs, poolSize),
+		wbCh:     make(chan writeBufArgs, poolSize*2),
+		wbCh4s:   make(chan writeBufArgs, poolSize*2),
 		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initClusterDb(); err != nil {
