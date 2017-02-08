@@ -25,7 +25,7 @@ func (self *TcpSessionConn) callbackHandler(r *ReadPacketResult) {
 			self.conn.Close()
 		}
 	}()
-	self.handler(r)
+	go self.handler(r)
 }
 
 func (self *TcpSessionConn) recv() {
