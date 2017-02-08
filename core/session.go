@@ -239,7 +239,7 @@ func (self *Session) CloseSession(tracemsg string) {
 		log4go.Error("session_close already process; sid=%s ; jid=%s", self.Status.Sid, self.Status.Jid)
 		return
 	}
-	log4go.Info("session_close at %s ; status=%s ; sid=%s ; jid=%s", tracemsg, self.Status.Status, self.Status.Sid, self.Status.Jid)
+	log4go.Info("session_close at %s ; [%s] status=%s ; sid=%s ; jid=%s", tracemsg, self.Status.Nodeid, self.Status.Status, self.Status.Sid, self.Status.Jid)
 	self.clean <- self.Status.Sid
 	if self.Status.Status == types.STATUS_LOGIN {
 		j, _ := types.NewJID(self.Status.Jid)
@@ -256,7 +256,13 @@ func (self *Session) CloseSession(tracemsg string) {
 //TODO 将 packet channel 变成普通数组传递进来，可取消一条线程,用 sc 来回调此函数
 func (self *Session) packetHandler(result *ReadPacketResult) {
 	self.setSessionTimeout(PACKET_HANDLER_TIMEOUT)
-	defer self.setSessionTimeout(0)
+	defer func() {
+		if errrr := recover(); errrr != nil {
+			log4go.Error("👮  ☠️  %s", errrr)
+		} else {
+			self.setSessionTimeout(0)
+		}
+	}()
 	if result.Err() != nil {
 		if self.Status.Status != types.STATUS_CLOSE {
 			self.CloseSession(fmt.Sprintf("packet_handler :: %s", result.Err()))
@@ -466,8 +472,8 @@ func (self *Session) cacheWrite(action string, vo interface{}) {
 
 //通过 tcp 创建 session
 func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
-	session := newSession(c, ssdb, node, cleanSession, wg)
 	sc := NewTcpSessionConn(conn)
+	session := newSession(c, ssdb, node, cleanSession, wg)
 	sc.ReadPacket(session.packetHandler)
 	session.sc = sc
 	session.setSessionTimeout(0)

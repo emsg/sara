@@ -30,7 +30,7 @@ func (self *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type Node struct {
-	lock                           *sync.RWMutex
+	sync.RWMutex
 	wg                             *sync.WaitGroup
 	Nodeid, name                   string
 	sessionMap                     map[string]*core.Session //all avaliable session
@@ -42,6 +42,8 @@ type Node struct {
 	wsListen, wssListen            net.Listener
 	db                             saradb.Database //SessionStatus db
 	dataChannel                    sararpc.DataChannel
+	acceptCh                       chan interface{}
+	totalAccepter                  int
 }
 
 var upgrader = websocket.Upgrader{
@@ -160,7 +162,20 @@ func (self *Node) Wait() {
 	//if self.tcpListen == nil {
 	//	return
 	//}
+	for i := 0; i < self.totalAccepter; i++ {
+		go func() {
+			defer recover()
+			for {
+				if conn, ok := <-self.acceptCh; ok {
+					self.dispatcher(conn)
+				} else {
+					return
+				}
+			}
+		}()
+	}
 	<-self.stop
+	close(self.acceptCh)
 	self.closeListener() // 关闭所有服务端口，停止接收新session
 	log4go.Info("⛑️  begin security shutdown.")
 	//shutdown
@@ -192,24 +207,24 @@ func (self *Node) clean() {
 		recover()
 	}()
 	for sid := range self.cleanSession {
-		self.lock.Lock()
+		self.Lock()
 		delete(self.sessionMap, sid)
 		log4go.Debug("clean_session_success sid=%s", sid)
-		self.lock.Unlock()
+		self.Unlock()
 	}
 }
 func (self *Node) fetchSession(sid string) (session *core.Session, ok bool) {
-	self.lock.RLock()
-	defer self.lock.RUnlock()
+	self.RLock()
+	defer self.RUnlock()
 	session, ok = self.sessionMap[sid]
 	return
 }
 func (self *Node) registerSession(session *core.Session) {
 	if sid := session.Status.Sid; sid != "" {
 		log4go.Debug("reg_session sid=%s", sid)
-		self.lock.Lock()
+		self.Lock()
 		self.sessionMap[sid] = session
-		self.lock.Unlock()
+		self.Unlock()
 	}
 }
 
@@ -245,27 +260,39 @@ func (self *Node) IsCurrentChannel(n string) bool {
 
 //implements MessageRouter interface <<<<<<<
 
+func (self *Node) dispatcher(conn interface{}) {
+	c := self.dataChannel.GetChannel()
+	switch conn.(type) {
+	case net.Conn:
+		self.registerSession(core.NewTcpSession(c, conn.(net.Conn), self.db, self, self.cleanSession, self.wg))
+	case *websocket.Conn:
+		self.registerSession(core.NewWsSession(c, conn.(*websocket.Conn), self.db, self, self.cleanSession, self.wg))
+	}
+}
+
 //接收来自 c 端的请求
 func (self *Node) acceptTCP() {
-	c := self.dataChannel.GetChannel()
+	//c := self.dataChannel.GetChannel()
 	for {
 		// 阻塞在这里，
 		//if conn, err := self.tcpListen.Accept(); err == nil {
 		if conn, err := self.tcpListen.AcceptTCP(); err == nil {
 			//conn.SetKeepAlive(true)
-			self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession, self.wg))
+			//self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession, self.wg))
+			self.acceptCh <- conn
 		}
 	}
 }
 
 func (self *Node) acceptTLS() {
-	c := self.dataChannel.GetChannel()
+	//c := self.dataChannel.GetChannel()
 	for {
 		// 阻塞在这里，
 		//if conn, err := self.tcpListen.Accept(); err == nil {
 		if conn, err := self.tlsListen.Accept(); err == nil {
 			//conn.SetKeepAlive(true)
-			self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession, self.wg))
+			//self.registerSession(core.NewTcpSession(c, conn, self.db, self, self.cleanSession, self.wg))
+			self.acceptCh <- conn
 		}
 	}
 }
@@ -276,8 +303,9 @@ func (self *Node) acceptWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log4go.Debug("🌍  >>> upgrade success")
-	c := self.dataChannel.GetChannel()
-	self.registerSession(core.NewWsSession(c, conn, self.db, self, self.cleanSession, self.wg))
+	//c := self.dataChannel.GetChannel()
+	//self.registerSession(core.NewWsSession(c, conn, self.db, self, self.cleanSession, self.wg))
+	self.acceptCh <- conn
 }
 
 func (self *Node) dataChannelHandler(message string) {
@@ -330,15 +358,16 @@ func (self *Node) cleanGhostSession() {
 //TODO 如何控制 nodeid 全局唯一，是否需要 gossip ?
 func New(ctx *cli.Context) *Node {
 	node := &Node{
-		lock:         &sync.RWMutex{},
-		wg:           &sync.WaitGroup{},
-		sessionMap:   make(map[string]*core.Session),
-		cleanSession: make(chan string, 50000),
-		Port:         config.GetInt("port", 4222),
-		WSPort:       config.GetInt("wsport", 4224),
-		TLSPort:      config.GetInt("tlsport", 4333),
-		WSSPort:      config.GetInt("wssport", 4334),
-		stop:         make(chan int),
+		wg:            &sync.WaitGroup{},
+		sessionMap:    make(map[string]*core.Session),
+		cleanSession:  make(chan string, 50000),
+		Port:          config.GetInt("port", 4222),
+		WSPort:        config.GetInt("wsport", 4224),
+		TLSPort:       config.GetInt("tlsport", 4333),
+		WSSPort:       config.GetInt("wssport", 4334),
+		stop:          make(chan int),
+		acceptCh:      make(chan interface{}, 65535),
+		totalAccepter: 100,
 	}
 	dbaddr := config.GetString("dbaddr", "localhost:6379")
 	dbpool := config.GetInt("dbpool", 100)

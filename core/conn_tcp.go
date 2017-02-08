@@ -18,6 +18,15 @@ func (self *TcpSessionConn) SetReadTimeout(timeout time.Time) {
 	self.conn.SetReadDeadline(timeout)
 	//self.conn.SetWriteDeadline(timeout)
 }
+func (self *TcpSessionConn) callbackHandler(r *ReadPacketResult) {
+	defer func() {
+		if e := recover(); e != nil {
+			log4go.Error("❌  null point exception ::> %s ::> %s", e, r)
+			self.conn.Close()
+		}
+	}()
+	self.handler(r)
+}
 
 func (self *TcpSessionConn) recv() {
 	defer func() {
@@ -25,7 +34,7 @@ func (self *TcpSessionConn) recv() {
 			log4go.Error("☠️  %s", e)
 			switch e.(type) {
 			case error:
-				self.handler(&ReadPacketResult{
+				self.callbackHandler(&ReadPacketResult{
 					err: e.(error),
 				})
 			}
@@ -38,7 +47,7 @@ func (self *TcpSessionConn) recv() {
 		if e != nil {
 			log4go.Debug("recv_error => %s", e)
 			// XXX 是否可以异步处理？比如每次一个新的线程来 handler
-			self.handler(&ReadPacketResult{
+			self.callbackHandler(&ReadPacketResult{
 				err: e,
 			})
 			return
@@ -48,7 +57,7 @@ func (self *TcpSessionConn) recv() {
 		self.part = newPart
 		log4go.Debug("👀  3 tcp_read_packet_decode => %s", packetList)
 		if len(packetList) > 0 {
-			self.handler(&ReadPacketResult{
+			self.callbackHandler(&ReadPacketResult{
 				packets: packetList,
 				err:     err,
 			})
