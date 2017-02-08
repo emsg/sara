@@ -66,6 +66,7 @@ func (self *RPCClient) getClient(addr string) (*emsg_inf_push.EmsgInfPushClient,
 func (self *RPCClient) Call(addr, licence, sn, content string) (string, error) {
 	client, err := self.getClient(addr)
 	if err != nil {
+		//TODO 当出现异常时，应该递归找下去，直到有不异常或queue空，然后返回
 		return "", err
 	}
 	if rtn, e := client.Process(licence, sn, content); e != nil {

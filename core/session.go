@@ -77,13 +77,14 @@ func (self *SessionStatus) ToJson() []byte {
 
 type Session struct {
 	sync.RWMutex
-	wg      *sync.WaitGroup
-	Status  *SessionStatus
-	sc      SessionConn
-	packets chan []byte
-	clean   chan<- string
-	ssdb    saradb.Database
-	node    MessageRouter
+	wg     *sync.WaitGroup
+	Status *SessionStatus
+	sc     SessionConn
+	//packets      chan []byte
+	clean        chan<- string
+	ssdb         saradb.Database
+	node         MessageRouter
+	packet_cache map[string]*types.Packet
 }
 
 func (self *Session) openSession(p []byte) {
@@ -189,13 +190,20 @@ func (self *Session) RoutePacketList(packetList []*types.Packet) {
 }
 
 func (self *Session) RoutePacket(packet *types.Packet) {
-	self.storePacket(packet)
+
+	//TODO store packet to memory
+
+	if self.Status.Status != types.STATUS_LOGIN {
+		return
+	}
 	jid, _ := types.NewJID(self.Status.Jid)
 	// packet 里面的 from 一定是正确的,这是 SDK 决定的
 	id, from, to, _ := packet.EnvelopeIdFromToType()
 	switch {
 	case jid.EqualWithoutResource(to):
 		//给我的消息, ack 消息
+		//把消息放入内存，并等待ack，收到后从内存清除
+		self.cacheWrite("add", packet)
 		self.SendMessage(packet.ToJson())
 	case jid.EqualWithoutResource(from):
 		//我发出去的消息
@@ -212,6 +220,7 @@ func (self *Session) RoutePacket(packet *types.Packet) {
 			} else {
 				//offline line message
 				log4go.Debug("📮  %s", to_key)
+				self.storePacket(packet)
 				external.OfflineCallback(string(packet.ToJson()))
 			}
 		}
@@ -226,6 +235,10 @@ func (self *Session) SendMessage(data []byte) (int, error) {
 }
 
 func (self *Session) CloseSession(tracemsg string) {
+	if self.Status.Status == types.STATUS_CLOSE {
+		log4go.Error("session_close already process; sid=%s ; jid=%s", self.Status.Sid, self.Status.Jid)
+		return
+	}
 	log4go.Info("session_close at %s ; status=%s ; sid=%s ; jid=%s", tracemsg, self.Status.Status, self.Status.Sid, self.Status.Jid)
 	self.clean <- self.Status.Sid
 	if self.Status.Status == types.STATUS_LOGIN {
@@ -236,6 +249,7 @@ func (self *Session) CloseSession(tracemsg string) {
 	}
 	self.Status.Status = types.STATUS_CLOSE
 	self.sc.Close()
+	self.cacheToStore()
 }
 
 // 这个方法只能处理 c2s 的请求，并不能处理 s2s
@@ -405,6 +419,7 @@ func (self *Session) fetchOfflinePacket() (pks []*types.BasePacket, ids []string
 }
 
 //收到ack消息就删除对应的消息
+//TODO 在 packet_cache 中删除在线消息
 func (self *Session) serverAck(packet *types.Packet) {
 	jid, _ := types.NewJID(self.Status.Jid)
 	idx := jid.ToOfflineKey()
@@ -415,9 +430,38 @@ func (self *Session) serverAck(packet *types.Packet) {
 			self.ssdb.DeleteByIdxKey(idx, key)
 		}
 	} else {
-		key := []byte(packet.Envelope.Id)
-		self.ssdb.DeleteByIdxKey(idx, key)
+		self.cacheWrite("del", packet.Envelope.Id)
+		//key := []byte(packet.Envelope.Id)
+		//self.ssdb.DeleteByIdxKey(idx, key)
 	}
+}
+
+//当session关闭时，需要刷一次缓存
+func (self *Session) cacheToStore() {
+	if len(self.packet_cache) == 0 {
+		log4go.Debug("🛢️  packet_cache_empty")
+		return
+	}
+	self.RLock()
+	defer self.RUnlock()
+	for _, v := range self.packet_cache {
+		log4go.Debug("🛢️  not_ack_packet_to_store = %s", v.ToJson())
+		StorePacket(self.ssdb, v)
+	}
+}
+func (self *Session) cacheWrite(action string, vo interface{}) {
+	self.Lock()
+	switch action {
+	case "add", "ADD", "Add":
+		p := vo.(*types.Packet)
+		self.packet_cache[p.Envelope.Id] = p
+		log4go.Debug("🛢️  packet_cache_add = %s", p.Envelope.Id)
+	case "del", "DEL", "Del":
+		id := vo.(string)
+		delete(self.packet_cache, id)
+		log4go.Debug("🛢️  packet_cache_del = %s", id)
+	}
+	self.Unlock()
 }
 
 //通过 tcp 创建 session
@@ -444,13 +488,14 @@ func newSession(c string, ssdb saradb.Database, node MessageRouter, cleanSession
 	sid := uuid.Rand().Hex()
 	nodeid := config.GetString("nodeid", "")
 	session := &Session{
-		wg:     wg,
-		Status: &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
-		clean:  cleanSession,
-		ssdb:   ssdb,
-		node:   node,
+		wg:           wg,
+		Status:       &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
+		clean:        cleanSession,
+		ssdb:         ssdb,
+		node:         node,
+		packet_cache: make(map[string]*types.Packet),
 		//sc:      sc,
-		packets: make(chan []byte, 32),
+		//packets: make(chan []byte, 32),
 	}
 	//go session.receive()
 	return session

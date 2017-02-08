@@ -228,7 +228,10 @@ func (self *Node) Route(channel, sid string, packet *types.Packet, signal ...byt
 			}
 		}
 	} else {
-		self.dataChannel.Publish(channel, string(packet.ToJson()))
+		if err := self.dataChannel.Publish(channel, string(packet.ToJson())); err != nil {
+			log4go.Error("❌  dataChannel.Publish_err: %s", err)
+			core.StorePacket(self.db, packet)
+		}
 	}
 }
 
@@ -330,7 +333,7 @@ func New(ctx *cli.Context) *Node {
 		lock:         &sync.RWMutex{},
 		wg:           &sync.WaitGroup{},
 		sessionMap:   make(map[string]*core.Session),
-		cleanSession: make(chan string, 4096),
+		cleanSession: make(chan string, 50000),
 		Port:         config.GetInt("port", 4222),
 		WSPort:       config.GetInt("wsport", 4224),
 		TLSPort:      config.GetInt("tlsport", 4333),
