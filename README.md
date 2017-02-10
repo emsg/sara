@@ -88,4 +88,21 @@ OPTIONS:
 <tr><td>enable_offline_callback</td><td>false</td><td>开启离线消息回调，需要提供 callback 参数，并实现 offline 接口</td></tr>
 </table>
 
+###### 启动服务
+```sh
+
+#> sara 
+[16:19:58 CST 2017/02/10] [INFO] (sara/saradb.(*SaraDatabase).wbfConsumer:110) write buffer started ; total consume [40]
+[16:19:58 CST 2017/02/10] [INFO] (sara/node.(*Node).cleanGhostSession:353) register node : n01
+[16:19:58 CST 2017/02/10] [INFO] (sara/sararpc.(*RPCServer).Start:47) RPCServer listener on  [localhost:4281]
+[16:19:58 CST 2017/02/10] [INFO] (sara/node.(*Node).cleanGhostSession:355) 🔪  👻  clean ghost session
+[16:19:58 CST 2017/02/10] [INFO] (sara/service.StartRPC:28) http-rpc start on [0.0.0.0:4280]
+[16:19:58 CST 2017/02/10] [INFO] (sara/node.(*Node).StartTCP:79) tcp start on [0.0.0.0:4222]
+[16:19:58 CST 2017/02/10] [INFO] (sara/node.(*Node).StartWS:70) ws start on [4224]
+[16:19:58 CST 2017/02/10] [INFO] (sara/node.(*Node).StartTLS:136) tls start on [0.0.0.0:4333]
+[16:19:58 CST 2017/02/10] [INFO] (sara/node.(*Node).StartWSS:113) wss start on [0.0.0.0:4334]
+
+```
+###### 在后台运行： nohup sara > /tmp/sara.log &
+
 
