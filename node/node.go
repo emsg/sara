@@ -401,7 +401,7 @@ func New(ctx *cli.Context) *Node {
 	if ctx.GlobalBool("debug") {
 		go func() {
 			for {
-				log4go.Info("[debug_status] num_goroutine : %d , session_map_len : %d", runtime.NumGoroutine(), len(node.sessionMap))
+				log4go.Info("[debug_status] num_go: %d , session: %d , r: %d , w: %d ", runtime.NumGoroutine(), len(node.sessionMap), core.MeasureReadGet(), core.MeasureWriteGet())
 				time.Sleep(time.Duration(time.Second * 10))
 			}
 		}()

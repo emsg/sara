@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+var max_buf_len int = 4096
+
 type TcpSessionConn struct {
 	handler PacketHandler
 	conn    net.Conn
@@ -25,7 +27,7 @@ func (self *TcpSessionConn) callbackHandler(r *ReadPacketResult) {
 			self.conn.Close()
 		}
 	}()
-	go self.handler(r)
+	self.handler(r)
 }
 
 func (self *TcpSessionConn) recv() {
@@ -40,28 +42,28 @@ func (self *TcpSessionConn) recv() {
 			}
 		}
 	}()
+	var buff_len int = 1024
 	for {
-		log4go.Debug("👀  1 tcp_read_packet")
-		buff := make([]byte, 256)
-		_, e := self.conn.Read(buff)
+		//动态调整缓冲区
+		buff := make([]byte, buff_len)
+		n, e := self.conn.Read(buff)
+		MeasureReadAdd(1)
 		if e != nil {
-			log4go.Debug("recv_error => %s", e)
-			// XXX 是否可以异步处理？比如每次一个新的线程来 handler
 			self.callbackHandler(&ReadPacketResult{
 				err: e,
 			})
 			return
 		}
-		log4go.Debug("👀  2 tcp_read_packet_buff %d => %b", len(buff), buff)
-		packetList, newPart, err := DecodePacket(buff, self.part)
+		log4go.Debug("buff_len=%d,n=%d", buff_len, n)
+		packetList, newPart, err := DecodePacket(buff[:n], self.part)
 		self.part = newPart
-		log4go.Debug("👀  3 tcp_read_packet_decode => %s", packetList)
 		if len(packetList) > 0 {
 			self.callbackHandler(&ReadPacketResult{
 				packets: packetList,
 				err:     err,
 			})
 		}
+		change_buff_len(&buff_len, n)
 	}
 }
 
@@ -78,6 +80,7 @@ func (self *TcpSessionConn) WritePacket(packet []byte) (i int, e error) {
 		}
 	}()
 	i, e = self.conn.Write(packet)
+	MeasureWriteAdd(1)
 	return
 }
 
@@ -93,4 +96,23 @@ func NewTcpSessionConn(conn net.Conn) *TcpSessionConn {
 		conn: conn,
 	}
 	return sc
+}
+func change_buff_len(buff_len *int, n int) {
+	if n > 2 {
+		// n == 2 时，可能是心跳和 kill 之类的信号，并非 packet
+		switch {
+		case n == *buff_len:
+			//放大
+			*buff_len += (*buff_len / 4)
+		case n < *buff_len:
+			//缩小
+			*buff_len -= (*buff_len / 4)
+		}
+		switch {
+		case *buff_len > max_buf_len:
+			*buff_len = max_buf_len
+		case *buff_len < n:
+			*buff_len = n + (n / 4)
+		}
+	}
 }

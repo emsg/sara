@@ -36,18 +36,20 @@ const (
 )
 
 type SaraDatabase struct {
-	Addr           string
-	PoolSize       int
-	c_cli          *cluster.Cluster
-	p_cli          *pool.Pool
-	model          DBMODEL
-	stop           chan struct{}
-	tl             bool
-	wbCh           chan writeBufArgs //异步的写操作缓冲区
-	wbCh4s         chan writeBufArgs //异步的写操作缓冲区,for session
-	wbSyncChList   []chan int        //同步写操作工作线程
-	wbSyncChList4s []chan int        //同步写操作工作线程,for session
-	wg             *sync.WaitGroup   //同步写操作工作线程
+	Addr     string
+	PoolSize int
+	c_cli    *cluster.Cluster
+	p_cli    *pool.Pool
+	model    DBMODEL
+	stop     chan struct{}
+	tl       bool
+	wbCh     chan writeBufArgs //异步的写操作缓冲区
+	wbCh4s   chan writeBufArgs //异步的写操作缓冲区,for session
+	// >>>> 这里为什么是两条通道呢？目的是 stop 服务时，暴力关闭消息通道，专心处理 session 通道
+	wbSyncChList   []chan int //同步写操作工作线程
+	wbSyncChList4s []chan int //同步写操作工作线程,for session
+	// <<<<
+	wg *sync.WaitGroup //同步写操作工作线程
 }
 
 func (self *SaraDatabase) wbfConsumerWorker(wbSyncCh chan int, wbCh chan writeBufArgs, _wbTotal int32) {
@@ -149,7 +151,8 @@ func (self *SaraDatabase) ResetExpire(key []byte, ex int) (t int, err error) {
 }
 func (self *SaraDatabase) Put(key []byte, value []byte) error {
 	if self.is4s(key) {
-		if r := self.execute4s_sync("SET", key, value); r != nil && r.Err != nil {
+		//if r := self.execute4s_sync("SET", key, value); r != nil && r.Err != nil {
+		if r := self.executeDirect("SET", key, value); r != nil && r.Err != nil {
 			return r.Err
 		}
 	} else {
@@ -159,7 +162,8 @@ func (self *SaraDatabase) Put(key []byte, value []byte) error {
 }
 func (self *SaraDatabase) PutEx(key []byte, value []byte, ex int) error {
 	if self.is4s(key) {
-		if r := self.execute4s_sync("SETEX", key, ex, value); r != nil && r.Err != nil {
+		//if r := self.execute4s_sync("SETEX", key, ex, value); r != nil && r.Err != nil {
+		if r := self.executeDirect("SETEX", key, ex, value); r != nil && r.Err != nil {
 			return r.Err
 		}
 	} else {
@@ -187,14 +191,17 @@ func (self *SaraDatabase) Delete(key []byte) error {
 func (self *SaraDatabase) PutExWithIdx(idx, key, value []byte, ex int) error {
 	idx = append(idx, IDX_SUFFIX...)
 	if self.is4s(key) {
-		r := self.execute4s_sync("HSET", idx, key, value)
+		//r := self.execute4s_sync("HSET", idx, key, value)
+		r := self.executeDirect("HSET", idx, key, value)
 		if r != nil && r.Err != nil {
 			return r.Err
 		}
 		if ex > 0 {
-			r = self.execute4s_sync("SETEX", key, ex, value)
+			//r = self.execute4s_sync("SETEX", key, ex, value)
+			r = self.executeDirect("SETEX", key, ex, value)
 		} else {
-			r = self.execute4s_sync("SET", key, value)
+			//r = self.execute4s_sync("SET", key, value)
+			r = self.executeDirect("SET", key, value)
 		}
 		if r != nil && r.Err != nil {
 			return r.Err
@@ -353,6 +360,7 @@ func (self *SaraDatabase) execute(cmd string, args ...interface{}) *redis.Resp {
 }
 
 //牺牲性能，来保证 session 中关键操作的稳定性
+/* 哗众取宠，这是对线程调度的最大误解
 func (self *SaraDatabase) execute4s_sync(cmd string, args ...interface{}) *redis.Resp {
 	respCh := make(chan *redis.Resp)
 	log4go.Debug("sync write : %s %s", cmd, args)
@@ -365,6 +373,7 @@ func (self *SaraDatabase) execute4s_sync(cmd string, args ...interface{}) *redis
 	r := <-respCh
 	return r
 }
+*/
 
 //针对session 的操作，放到一个单独的通道上执行
 func (self *SaraDatabase) execute4s(cmd string, args ...interface{}) *redis.Resp {
