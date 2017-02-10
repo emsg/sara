@@ -112,7 +112,7 @@ var (
 	}
 	Ms = cli.IntFlag{
 		Name:  "messagesize,ms",
-		Usage: "payload size, unit KB,1KB==1024B;'0' is disable",
+		Usage: "payload size, unit Byte,1KB==1024Byte;'0' is disable",
 		Value: 0,
 	}
 	Mg = cli.IntFlag{

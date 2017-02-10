@@ -45,8 +45,6 @@ type SessionConn interface {
 type MessageRouter interface {
 	// 当目标session在线时，将packet路由到制定的node上完成发送
 	Route(channel, sid string, packet *types.Packet, signal ...byte)
-	// 判断传入的 node 是否等于当前节点的 endpoint
-	IsCurrentChannel(node string) bool
 }
 
 const (
@@ -190,9 +188,6 @@ func (self *Session) RoutePacketList(packetList []*types.Packet) {
 }
 
 func (self *Session) RoutePacket(packet *types.Packet) {
-
-	//TODO store packet to memory
-
 	if self.Status.Status != types.STATUS_LOGIN {
 		return
 	}

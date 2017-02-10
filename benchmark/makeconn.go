@@ -23,7 +23,7 @@ var (
 	fail            int             = 0
 	heartbeat       int             = 50 // default gap : 50s
 	messageGap      int             = 5  // default gap : 5s
-	messageSize     int             = 0  // default unit k , 1 == 1024 byte
+	messageSize     int             = 0  // default unit Byte , 1k == 1024 byte
 	content         []byte               // make([]byte,messageSize * 1024)
 	stop            chan struct{}   = make(chan struct{})
 	addrQueue       chan string     = make(chan string, 100)
@@ -270,7 +270,7 @@ func MakeConn(laddr, addr string, total, hb, mg, ms int) {
 	heartbeat, messageGap, messageSize = hb, mg, ms
 	//init message
 	if messageSize > 0 {
-		content = make([]byte, messageSize*1024)
+		content = make([]byte, messageSize)
 		for i, _ := range content {
 			content[i] = byte(97)
 		}

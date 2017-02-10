@@ -31,9 +31,9 @@ func (self *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type Node struct {
 	sync.RWMutex
-	wg                             *sync.WaitGroup
-	Nodeid, name                   string
-	sessionMap                     map[string]*core.Session //all avaliable session
+	wg           *sync.WaitGroup
+	Nodeid, name string
+	//sessionMap                     map[string]*core.Session //all avaliable session
 	Port, TLSPort, WSPort, WSSPort int
 	stop                           chan int
 	cleanSession                   chan string
@@ -41,9 +41,11 @@ type Node struct {
 	tlsListen                      net.Listener
 	wsListen, wssListen            net.Listener
 	db                             saradb.Database //SessionStatus db
-	dataChannel                    sararpc.DataChannel
-	acceptCh                       chan interface{}
-	totalAccepter                  int
+	//dataChannel                    sararpc.DataChannel
+	currentChannel string
+	acceptCh       chan interface{}
+	totalAccepter  int
+	router         *Router
 }
 
 var upgrader = websocket.Upgrader{
@@ -180,10 +182,10 @@ func (self *Node) Wait() {
 	log4go.Info("⛑️  begin security shutdown.")
 	//shutdown
 	i := 0
-	t := len(self.sessionMap)
+	t := len(sessionMap)
 
 	slist := []*core.Session{}
-	for _, s := range self.sessionMap {
+	for _, s := range sessionMap {
 		slist = append(slist, s)
 		i++
 	}
@@ -208,30 +210,32 @@ func (self *Node) clean() {
 	}()
 	for sid := range self.cleanSession {
 		self.Lock()
-		delete(self.sessionMap, sid)
+		delete(sessionMap, sid)
 		log4go.Debug("clean_session_success sid=%s", sid)
 		self.Unlock()
 	}
 }
-func (self *Node) fetchSession(sid string) (session *core.Session, ok bool) {
-	self.RLock()
-	defer self.RUnlock()
-	session, ok = self.sessionMap[sid]
-	return
-}
-func (self *Node) registerSession(session *core.Session) {
-	if sid := session.Status.Sid; sid != "" {
-		log4go.Debug("reg_session sid=%s", sid)
-		self.Lock()
-		self.sessionMap[sid] = session
-		self.Unlock()
-	}
-}
+
+//func (self *Node) fetchSession(sid string) (session *core.Session, ok bool) {
+//	self.RLock()
+//	defer self.RUnlock()
+//	session, ok = self.sessionMap[sid]
+//	return
+//}
+//func (self *Node) registerSession(session *core.Session) {
+//	if sid := session.Status.Sid; sid != "" {
+//		log4go.Debug("reg_session sid=%s", sid)
+//		self.Lock()
+//		self.sessionMap[sid] = session
+//		self.Unlock()
+//	}
+//}
 
 //implements MessageRouter interface >>>>>>>>
+/*
 func (self *Node) Route(channel, sid string, packet *types.Packet, signal ...byte) {
 	if channel == "" || self.dataChannel.GetChannel() == channel {
-		if session, ok := self.fetchSession(sid); ok {
+		if session, ok := fetchSession(sid); ok {
 			if signal != nil {
 				log4go.Debug("👮 node.route_signal -> %s", signal)
 				if signal[0] == types.KILL {
@@ -249,24 +253,17 @@ func (self *Node) Route(channel, sid string, packet *types.Packet, signal ...byt
 		}
 	}
 }
-
-func (self *Node) IsCurrentChannel(n string) bool {
-	if n == self.dataChannel.GetChannel() {
-		return true
-	} else {
-		return false
-	}
-}
-
+*/
 //implements MessageRouter interface <<<<<<<
 
 func (self *Node) dispatcher(conn interface{}) {
-	c := self.dataChannel.GetChannel()
+	//c := self.dataChannel.GetChannel()
+	c := self.currentChannel
 	switch conn.(type) {
 	case net.Conn:
-		self.registerSession(core.NewTcpSession(c, conn.(net.Conn), self.db, self, self.cleanSession, self.wg))
+		registerSession(core.NewTcpSession(c, conn.(net.Conn), self.db, self.router, self.cleanSession, self.wg))
 	case *websocket.Conn:
-		self.registerSession(core.NewWsSession(c, conn.(*websocket.Conn), self.db, self, self.cleanSession, self.wg))
+		registerSession(core.NewWsSession(c, conn.(*websocket.Conn), self.db, self.router, self.cleanSession, self.wg))
 	}
 }
 
@@ -337,7 +334,7 @@ func (self *Node) routePacket(packet *types.Packet) {
 		skey := jid.ToSessionid()
 		if ssb, se := self.db.Get(skey); se == nil {
 			ss := core.NewSessionStatusFromJson(ssb)
-			self.Route(ss.Channel, ss.Sid, packet)
+			self.router.Route(ss.Channel, ss.Sid, packet)
 		} else {
 			core.StorePacket(self.db, packet)
 			log4go.Debug("☕️  📮  %s", skey)
@@ -358,9 +355,9 @@ func (self *Node) cleanGhostSession() {
 //TODO 如何控制 nodeid 全局唯一，是否需要 gossip ?
 func New(ctx *cli.Context) *Node {
 	node := &Node{
-		wg:            &sync.WaitGroup{},
-		sessionMap:    make(map[string]*core.Session),
-		cleanSession:  make(chan string, 50000),
+		wg: &sync.WaitGroup{},
+		//sessionMap:    make(map[string]*core.Session),
+		cleanSession:  make(chan string, 100000),
 		Port:          config.GetInt("port", 4222),
 		WSPort:        config.GetInt("wsport", 4224),
 		TLSPort:       config.GetInt("tlsport", 4333),
@@ -387,21 +384,23 @@ func New(ctx *cli.Context) *Node {
 	}
 	//node.dataChannel = node.db.GenDataChannel(node.name)
 	//node.dataChannel.Subscribe(node.dataChannelHandler)
-	node.dataChannel = sararpc.NewRPCDataChannel(rpcserverAddr, 20000)
-	node.dataChannel.Subscribe(node.dataChannelHandler)
-	if rpcserver, err := sararpc.NewRPCServer(rpcserverAddr, node.dataChannel); err != nil {
+	dataChannel := sararpc.NewRPCDataChannel(rpcserverAddr, 20000)
+	dataChannel.Subscribe(node.dataChannelHandler)
+	node.currentChannel = dataChannel.GetChannel()
+	if rpcserver, err := sararpc.NewRPCServer(rpcserverAddr, dataChannel); err != nil {
 		defer os.Exit(0)
 		log4go.Error("rpcserver start fail . err=%v", err)
 	} else {
 		go func() { rpcserver.Start() }()
 	}
 	node.Nodeid = config.GetString("nodeid", "")
+	node.router = newRouter(node.db, dataChannel)
 	node.cleanGhostSession()
 	go node.clean()
 	if ctx.GlobalBool("debug") {
 		go func() {
 			for {
-				log4go.Info("[debug_status] num_go: %d , session: %d , r: %d , w: %d ", runtime.NumGoroutine(), len(node.sessionMap), core.MeasureReadGet(), core.MeasureWriteGet())
+				log4go.Info("[debug_status] num_go: %d , session: %d , r: %d , w: %d ", runtime.NumGoroutine(), len(sessionMap), core.MeasureReadGet(), core.MeasureWriteGet())
 				time.Sleep(time.Duration(time.Second * 10))
 			}
 		}()

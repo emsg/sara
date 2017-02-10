@@ -46,6 +46,7 @@ type Delay struct {
 type Packet struct {
 	BasePacket
 	Delay *Delay `json:"delay,omitempty"`
+	raw   []byte
 }
 
 //组装离线消息，在opensession返回消息中
