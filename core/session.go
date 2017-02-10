@@ -44,7 +44,8 @@ type SessionConn interface {
 
 type MessageRouter interface {
 	// 当目标session在线时，将packet路由到制定的node上完成发送
-	Route(channel, sid string, packet *types.Packet, signal ...byte)
+	//TODO 异步处理，但是会在 loadover 时，返回一个 error,要处理一下这个 error
+	Route(channel, sid string, packet *types.Packet, signal ...byte) error
 }
 
 const (
@@ -81,7 +82,7 @@ type Session struct {
 	//packets      chan []byte
 	clean        chan<- string
 	ssdb         saradb.Database
-	node         MessageRouter
+	router       MessageRouter
 	packet_cache map[string]*types.Packet
 }
 
@@ -143,7 +144,7 @@ func (self *Session) verify(p []byte) (packet *types.Packet, ok bool) {
 		ss := NewSessionStatusFromJson(s)
 		//TODO 这里可以根据用户个人配置，来决定T掉哪一个
 		//默认踢掉前一个
-		self.node.Route(ss.Channel, ss.Sid, nil, types.KILL)
+		self.router.Route(ss.Channel, ss.Sid, nil, types.KILL)
 	}
 	//callback_service.auth
 	log4go.Debug("verify_auth jid=%s , pwd=%s", jid, pwd)
@@ -210,7 +211,7 @@ func (self *Session) RoutePacket(packet *types.Packet) {
 			//find target session
 			if ssb, se := self.ssdb.Get(to_key); se == nil {
 				ss := NewSessionStatusFromJson(ssb)
-				self.node.Route(ss.Channel, ss.Sid, packet)
+				self.router.Route(ss.Channel, ss.Sid, packet)
 				log4go.Debug("✉️  %s->%s", to_key, ssb)
 			} else {
 				//offline line message
@@ -466,9 +467,9 @@ func (self *Session) cacheWrite(action string, vo interface{}) {
 }
 
 //通过 tcp 创建 session
-func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
+func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, router MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sc := NewTcpSessionConn(conn)
-	session := newSession(c, ssdb, node, cleanSession, wg)
+	session := newSession(c, ssdb, router, cleanSession, wg)
 	sc.ReadPacket(session.packetHandler)
 	session.sc = sc
 	session.setSessionTimeout(0)
@@ -476,8 +477,8 @@ func NewTcpSession(c string, conn net.Conn, ssdb saradb.Database, node MessageRo
 }
 
 //通过 websocket 创建 session
-func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
-	session := newSession(c, ssdb, node, cleanSession, wg)
+func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, router MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
+	session := newSession(c, ssdb, router, cleanSession, wg)
 	sc := NewWsSessionConn(conn)
 	sc.ReadPacket(session.packetHandler)
 	session.sc = sc
@@ -485,7 +486,7 @@ func NewWsSession(c string, conn *websocket.Conn, ssdb saradb.Database, node Mes
 	return session
 }
 
-func newSession(c string, ssdb saradb.Database, node MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
+func newSession(c string, ssdb saradb.Database, router MessageRouter, cleanSession chan<- string, wg *sync.WaitGroup) *Session {
 	sid := uuid.Rand().Hex()
 	nodeid := config.GetString("nodeid", "")
 	session := &Session{
@@ -493,7 +494,7 @@ func newSession(c string, ssdb saradb.Database, node MessageRouter, cleanSession
 		Status:       &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
 		clean:        cleanSession,
 		ssdb:         ssdb,
-		node:         node,
+		router:       router,
 		packet_cache: make(map[string]*types.Packet),
 		//sc:      sc,
 		//packets: make(chan []byte, 32),

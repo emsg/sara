@@ -1,6 +1,7 @@
 package node
 
 import (
+	"errors"
 	"sara/core"
 	"sara/core/types"
 	"sara/saradb"
@@ -26,7 +27,7 @@ type Router struct {
 	routerItemCh chan *routerItem
 }
 
-func (self *Router) Route(channel, sid string, packet *types.Packet, signal ...byte) {
+func (self *Router) Route(channel, sid string, packet *types.Packet, signal ...byte) error {
 	item := &routerItem{
 		channel: channel,
 		sid:     sid,
@@ -37,7 +38,12 @@ func (self *Router) Route(channel, sid string, packet *types.Packet, signal ...b
 	} else {
 		item.signal = 0
 	}
-	self.routerItemCh <- item
+	select {
+	case self.routerItemCh <- item:
+		return nil
+	default:
+		return errors.New("load_over")
+	}
 }
 
 func (self *Router) worker() {
@@ -74,7 +80,7 @@ func newRouter(db saradb.Database, dataChannel sararpc.DataChannel) *Router {
 		dataChannel:  dataChannel,
 		routerItemCh: make(chan *routerItem, 100000),
 	}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		go router.worker()
 	}
 	return router

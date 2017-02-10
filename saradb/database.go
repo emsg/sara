@@ -101,8 +101,8 @@ EndLoop:
 
 func (self *SaraDatabase) wbfConsumer() {
 	consumerTotal := 20
-	if self.PoolSize > 200 {
-		consumerTotal = self.PoolSize / 10
+	if self.PoolSize > 100 {
+		consumerTotal = self.PoolSize / 5
 	}
 	wbSyncChList := make([]chan int, 0)
 	wbSyncChList4s := make([]chan int, 0)
@@ -409,8 +409,8 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, poolSize*2),
-		wbCh4s:   make(chan writeBufArgs, poolSize*2),
+		wbCh:     make(chan writeBufArgs, poolSize*10),
+		wbCh4s:   make(chan writeBufArgs, poolSize*10),
 		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initDb(); err != nil {
@@ -424,8 +424,8 @@ func NewClusterDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, poolSize*2),
-		wbCh4s:   make(chan writeBufArgs, poolSize*2),
+		wbCh:     make(chan writeBufArgs, poolSize*10),
+		wbCh4s:   make(chan writeBufArgs, poolSize*10),
 		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initClusterDb(); err != nil {
