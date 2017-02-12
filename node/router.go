@@ -78,9 +78,9 @@ func newRouter(db saradb.Database, dataChannel sararpc.DataChannel) *Router {
 	router := &Router{
 		db:           db,
 		dataChannel:  dataChannel,
-		routerItemCh: make(chan *routerItem, 100000),
+		routerItemCh: make(chan *routerItem, types.ROUTER_QUEUE_SIZE),
 	}
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < (types.ROUTER_WORKER_NUM); i++ {
 		go router.worker()
 	}
 	return router

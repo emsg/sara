@@ -211,8 +211,8 @@ func (self *Node) clean() {
 	for sid := range self.cleanSession {
 		self.Lock()
 		delete(sessionMap, sid)
-		log4go.Debug("clean_session_success sid=%s", sid)
 		self.Unlock()
+		log4go.Debug("clean_session_success sid=%s", sid)
 	}
 }
 
@@ -357,14 +357,14 @@ func New(ctx *cli.Context) *Node {
 	node := &Node{
 		wg: &sync.WaitGroup{},
 		//sessionMap:    make(map[string]*core.Session),
-		cleanSession:  make(chan string, 100000),
 		Port:          config.GetInt("port", 4222),
 		WSPort:        config.GetInt("wsport", 4224),
 		TLSPort:       config.GetInt("tlsport", 4333),
 		WSSPort:       config.GetInt("wssport", 4334),
+		cleanSession:  make(chan string, 100000),
 		stop:          make(chan int),
-		acceptCh:      make(chan interface{}, 65535),
-		totalAccepter: 100,
+		acceptCh:      make(chan interface{}, types.ACCEPT_QUEUE_SIZE),
+		totalAccepter: types.ACCEPT_WORKER_NUM,
 	}
 	dbaddr := config.GetString("dbaddr", "localhost:6379")
 	dbpool := config.GetInt("dbpool", 100)
@@ -384,7 +384,7 @@ func New(ctx *cli.Context) *Node {
 	}
 	//node.dataChannel = node.db.GenDataChannel(node.name)
 	//node.dataChannel.Subscribe(node.dataChannelHandler)
-	dataChannel := sararpc.NewRPCDataChannel(rpcserverAddr, 20000)
+	dataChannel := sararpc.NewRPCDataChannel(rpcserverAddr, types.DATACHANNEL_QUEUE_SIZE)
 	dataChannel.Subscribe(node.dataChannelHandler)
 	node.currentChannel = dataChannel.GetChannel()
 	if rpcserver, err := sararpc.NewRPCServer(rpcserverAddr, dataChannel); err != nil {

@@ -409,8 +409,8 @@ func NewDatabase(addr string, poolSize int) (*SaraDatabase, error) {
 		Addr:     addr,
 		PoolSize: poolSize,
 		stop:     make(chan struct{}),
-		wbCh:     make(chan writeBufArgs, poolSize*10),
-		wbCh4s:   make(chan writeBufArgs, poolSize*10),
+		wbCh:     make(chan writeBufArgs, types.DB_W_QUEUE_SIZE),
+		wbCh4s:   make(chan writeBufArgs, types.DB_W_QUEUE_SIZE),
 		wg:       new(sync.WaitGroup),
 	}
 	if err := c.initDb(); err != nil {
