@@ -46,13 +46,13 @@ COMMANDS:
      makeconn  创建指定个数的连接，测试最大连接数
 
    debug:
-     pprof  将 cpu/mem 信息写入文件
+     pprof  将 cpu/mem/block 信息写入文件
 
 GLOBAL OPTIONS:
    --debug                   write 'pprof' info to /tmp/sara_cpu.out and /tmp/sara_mem.out
-   --config value, -c value  cmd-line first, config second  (default: "/etc/sara/conf.json")
+   --config value, -c value  set config path  (default: "/etc/sara/conf.json")
    --help, -h                show help
-   --version, -v             print the version
+   --version, -v             show current version
 ```
 
 ###### sara setup -h
