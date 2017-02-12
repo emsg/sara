@@ -64,7 +64,7 @@ var (
 	}
 	ConfigFlag = cli.StringFlag{
 		Name:  "config,c",
-		Usage: "cmd-line first, config second ",
+		Usage: "set config path",
 		Value: "/etc/sara/conf.json",
 	}
 	NodeidFlag = cli.StringFlag{

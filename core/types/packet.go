@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/log4go"
+	"github.com/tidwall/gjson"
 )
 
 type BasePacket struct {
@@ -64,6 +65,9 @@ func (self *Packet) AddDelay(packets []*BasePacket) {
 }
 
 func (self *Packet) ToJson() []byte {
+	if self.raw != nil {
+		return self.raw
+	}
 	if d, e := json.Marshal(self); e != nil {
 		log4go.Error(e)
 		return nil
@@ -87,7 +91,16 @@ func NewBasePacket(jsonData []byte) (*BasePacket, error) {
 }
 func NewPacket(jsonData []byte) (*Packet, error) {
 	packet := &Packet{}
-	err := json.Unmarshal(jsonData, packet)
+	envelope := Envelope{}
+	r := gjson.Get(string(jsonData), "envelope")
+	if !r.Exists() {
+		return nil, errors.New("error_packet")
+	}
+	envelopeRaw := r.Raw
+	err := json.Unmarshal([]byte(envelopeRaw), &envelope)
+	//err := json.Unmarshal(jsonData, packet)
+	packet.Envelope = envelope
+	packet.raw = jsonData
 	return packet, err
 }
 

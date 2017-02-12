@@ -49,10 +49,10 @@ type MessageRouter interface {
 }
 
 const (
-	LOGIN_TIMEOUT          int    = 5
-	SESSION_TIMEOUT               = 60            //等待接收时的超时时间
-	PACKET_HANDLER_TIMEOUT        = 120           //收到消息后，最多可以延迟这么久,否则就是服务器过载
-	OFFLINE_EXPIRED               = 3600 * 24 * 7 //default 7days
+	LOGIN_TIMEOUT          int    = 8
+	SESSION_TIMEOUT               = 100                 //等待接收时的超时时间
+	PACKET_HANDLER_TIMEOUT        = SESSION_TIMEOUT * 2 //收到消息后，最多可以延迟这么久,否则就是服务器过载
+	OFFLINE_EXPIRED               = 3600 * 24 * 7       //default 7days
 	SERVER_ACK             string = "server_ack"
 )
 
@@ -80,10 +80,10 @@ type Session struct {
 	Status *SessionStatus
 	sc     SessionConn
 	//packets      chan []byte
-	clean        chan<- string
-	ssdb         saradb.Database
-	router       MessageRouter
-	packet_cache map[string]*types.Packet
+	clean   chan<- string
+	ssdb    saradb.Database
+	router  MessageRouter
+	pkgBuff map[string]*types.Packet
 }
 
 func (self *Session) openSession(p []byte) {
@@ -199,7 +199,7 @@ func (self *Session) RoutePacket(packet *types.Packet) {
 	case jid.EqualWithoutResource(to):
 		//给我的消息, ack 消息
 		//把消息放入内存，并等待ack，收到后从内存清除
-		self.cacheWrite("add", packet)
+		self.pkgBuffWrite("add", packet)
 		self.SendMessage(packet.ToJson())
 	case jid.EqualWithoutResource(from):
 		//我发出去的消息
@@ -245,7 +245,7 @@ func (self *Session) CloseSession(tracemsg string) {
 	}
 	self.Status.Status = types.STATUS_CLOSE
 	self.sc.Close()
-	self.cacheToStore()
+	self.pkgBuffToStore()
 }
 
 // 这个方法只能处理 c2s 的请求，并不能处理 s2s
@@ -281,10 +281,6 @@ func (self *Session) packetHandler(result *ReadPacketResult) {
 			if msgtype == types.MSG_TYPE_STATE && SERVER_ACK == to {
 				//server_ack 消息，删除离线
 				self.serverAck(packet)
-			} else if msgtype == types.MSG_TYPE_CHAT {
-				// 单聊
-				self.answer(types.NewPacketAck(id))
-				self.RoutePacket(packet)
 			} else if msgtype == types.MSG_TYPE_GROUP_CHAT {
 				// 群聊
 				if packets, gerr := GenerateGroupPackets(self.ssdb, packet); gerr == nil {
@@ -294,7 +290,12 @@ func (self *Session) packetHandler(result *ReadPacketResult) {
 					self.answer(types.NewPacketSysNotify(id, gerr.Error()))
 				}
 			} else {
-				//TODO 错误的操作
+				// 1 v 1 消息，如单聊
+				if packet.Envelope.Ack != 0 {
+					self.answer(types.NewPacketAck(id))
+				}
+				//TODO envelope.ct 的值，得修正一下
+				self.RoutePacket(packet)
 			}
 		} else {
 			log4go.Debug("👀  s=>>  %s", p)
@@ -421,7 +422,7 @@ func (self *Session) fetchOfflinePacket() (pks []*types.BasePacket, ids []string
 }
 
 //收到ack消息就删除对应的消息
-//TODO 在 packet_cache 中删除在线消息
+//TODO 在 pkgBuff 中删除在线消息
 func (self *Session) serverAck(packet *types.Packet) {
 	jid, _ := types.NewJID(self.Status.Jid)
 	idx := jid.ToOfflineKey()
@@ -432,36 +433,36 @@ func (self *Session) serverAck(packet *types.Packet) {
 			self.ssdb.DeleteByIdxKey(idx, key)
 		}
 	} else {
-		self.cacheWrite("del", packet.Envelope.Id)
+		self.pkgBuffWrite("del", packet.Envelope.Id)
 		//key := []byte(packet.Envelope.Id)
 		//self.ssdb.DeleteByIdxKey(idx, key)
 	}
 }
 
 //当session关闭时，需要刷一次缓存
-func (self *Session) cacheToStore() {
-	if len(self.packet_cache) == 0 {
-		log4go.Debug("🛢️  packet_cache_empty")
+func (self *Session) pkgBuffToStore() {
+	if len(self.pkgBuff) == 0 {
+		log4go.Debug("🛢️  pkgBuff_empty")
 		return
 	}
 	self.RLock()
 	defer self.RUnlock()
-	for _, v := range self.packet_cache {
+	for _, v := range self.pkgBuff {
 		log4go.Debug("🛢️  not_ack_packet_to_store = %s", v.ToJson())
 		StorePacket(self.ssdb, v)
 	}
 }
-func (self *Session) cacheWrite(action string, vo interface{}) {
+func (self *Session) pkgBuffWrite(action string, vo interface{}) {
 	self.Lock()
 	switch action {
 	case "add", "ADD", "Add":
 		p := vo.(*types.Packet)
-		self.packet_cache[p.Envelope.Id] = p
-		log4go.Debug("🛢️  packet_cache_add = %s", p.Envelope.Id)
+		self.pkgBuff[p.Envelope.Id] = p
+		log4go.Debug("🛢️  pkgBuff_add = %s", p.Envelope.Id)
 	case "del", "DEL", "Del":
 		id := vo.(string)
-		delete(self.packet_cache, id)
-		log4go.Debug("🛢️  packet_cache_del = %s", id)
+		delete(self.pkgBuff, id)
+		log4go.Debug("🛢️  pkgBuff_del = %s", id)
 	}
 	self.Unlock()
 }
@@ -490,16 +491,13 @@ func newSession(c string, ssdb saradb.Database, router MessageRouter, cleanSessi
 	sid := uuid.Rand().Hex()
 	nodeid := config.GetString("nodeid", "")
 	session := &Session{
-		wg:           wg,
-		Status:       &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
-		clean:        cleanSession,
-		ssdb:         ssdb,
-		router:       router,
-		packet_cache: make(map[string]*types.Packet),
-		//sc:      sc,
-		//packets: make(chan []byte, 32),
+		wg:      wg,
+		Status:  &SessionStatus{Sid: sid, Status: types.STATUS_CONN, Nodeid: nodeid, Channel: c},
+		clean:   cleanSession,
+		ssdb:    ssdb,
+		router:  router,
+		pkgBuff: make(map[string]*types.Packet),
 	}
-	//go session.receive()
 	return session
 }
 

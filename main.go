@@ -40,7 +40,7 @@ func init() {
 	app = cli.NewApp()
 	app.Name = os.Args[0]
 	app.Usage = "SARA IM Server"
-	app.Version = "0.0.1"
+	app.Version = version
 	app.Author = "liangc"
 	app.Email = "cc14514@icloud.com"
 	app.Flags = utils.InitFlags()
@@ -264,7 +264,9 @@ func setupConf(ctx *cli.Context) error {
 }
 
 func vsn(ctx *cli.Context) error {
-	fmt.Println("version:", version)
-	fmt.Println("source: https://github.com/emsg/sara")
+	fmt.Println("version\t:", version)
+	fmt.Println("auth\t:", app.Author)
+	fmt.Println("email\t:", app.Email)
+	fmt.Println("source\t: https://github.com/emsg/sara")
 	return nil
 }
