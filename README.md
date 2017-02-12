@@ -5,17 +5,22 @@
 # 协议文档
 https://github.com/emsg/docs/wiki
 
-## 安装与使用
+## 安装与使用 (linux/macOs)
+#### 环境依赖
+```sh
+golang 1.7+
+redis
+```
 
-#### 编译
+#### 编译 
 ###### 假设 GOPATH 在 /opt/gopath 目录, golang 1.7+
 ```sh
 cd /opt/gopath/src
 git clone https://github.com/emsg/sara.git
-cd /app/gopath
+cd /opt/gopath
 go install sara
 # 应当确保 /usr/local/bin 在 PATH 中
-sudo ln -s /usr/local/bin/sara /app/gopath/bin/sara
+sudo ln -s /usr/local/bin/sara /opt/gopath/bin/sara
 ```
 ###### sara -h
 ```sh
