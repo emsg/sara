@@ -22,6 +22,8 @@ go install sara
 # 应当确保 /usr/local/bin 在 PATH 中
 sudo ln -s /usr/local/bin/sara /opt/gopath/bin/sara
 ```
+
+#### 运行
 ###### sara -h
 ```sh
 NAME:
@@ -110,4 +112,11 @@ OPTIONS:
 ```
 ###### 在后台运行： nohup sara > /tmp/sara.log &
 
+#### 集群
+###### 有关集群的配置项
+```sh
+accesstoken : 没个节点的 token 都应当一致，否则节点间也无法通信;
+nodeid : 集群中每个节点都有一个唯一的 id ，切记不能重复，建议按照 n01、n02、n03 这样编排;
+dbaddr : 每个节点都要把 session 注册到这个 db 中，所以每个节点的此项配置应当是一致的;
+```
 
